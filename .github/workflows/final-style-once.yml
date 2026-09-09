@@ -16,6 +16,18 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install
+      - name: Resolve iterator lint/type conflict
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('plugins/repl/src/runtime/operations.ts')
+          text = path.read_text()
+          text = text.replace(
+              "  const values = map.values().toArray()\n  map.clear()\n",
+              "  const values: Cell[] = []\n  for (const cell of map.values()) {\n    values.push(cell)\n  }\n\n  map.clear()\n",
+          )
+          path.write_text(text)
+          PY
       - run: bunx --bun eslint . --fix
       - run: bun run format
       - name: Commit style fixes
