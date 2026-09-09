@@ -1,7 +1,14 @@
 import { Effect } from 'effect'
 import { utf8Tail } from './output.ts'
 import type { RuntimeState } from './state.ts'
-import { PREVIEW_BYTES, errorMessage, isSameCell, type Cell, type Job } from './types.ts'
+import {
+  PREVIEW_BYTES,
+  SESSION_ID_KEY,
+  errorMessage,
+  isSameCell,
+  type Cell,
+  type Job
+} from './types.ts'
 
 function isNotificationSuppressed(cell: Cell, job: Job): boolean {
   return cell.notificationsSuppressed || job.notificationSuppressed
@@ -69,7 +76,7 @@ function inputText(job: Job): string {
 
 function deliveryFailure(label: string, cell: Cell, job: Job, error: unknown): Effect.Effect<void> {
   return Effect.logWarning(label, {
-    ['sessionID']: cell.sessionID,
+    [SESSION_ID_KEY]: cell.sessionID,
     jobId: job.id,
     error: errorMessage(error)
   })
@@ -84,7 +91,7 @@ export function notifyTerminal(state: RuntimeState, cell: Cell, job: Job): Effec
     job.terminalNotificationDone = true
     return state.ctx.session
       .synthetic({
-        ['sessionID']: cell.sessionID,
+        [SESSION_ID_KEY]: cell.sessionID,
         text: terminalText(cell, job),
         resume: true
       })
@@ -111,7 +118,7 @@ export function notifyInput(
     job.inputNotificationSerial = serial
     return state.ctx.session
       .synthetic({
-        ['sessionID']: cell.sessionID,
+        [SESSION_ID_KEY]: cell.sessionID,
         text: inputText(job),
         resume: true
       })

@@ -15,11 +15,12 @@ import type {
 } from '../model.ts'
 import type { OutputRing } from '../output-ring.ts'
 
-export const TRANSCRIPT_BYTES = 1024 * 1024
+export const TRANSCRIPT_BYTES = 1_024 * 1_024
 const HISTORY_LIMIT = 20
-export const PREVIEW_BYTES = 16 * 1024
+export const PREVIEW_BYTES = 16 * 1_024
 export const FOREGROUND_MS = 5_000
 export const CANCEL_GRACE_MS = 2_000
+export const SESSION_ID_KEY = 'sessionID' as const
 
 export type SessionId = Parameters<Plugin.Context['session']['get']>[0]['sessionID']
 export type ToolCallContext = { readonly sessionID: SessionId }
@@ -94,10 +95,10 @@ function signalPair(): SignalPair {
   }
 }
 
-const TERMINAL_STATES: readonly JobState[] = ['succeeded', 'failed', 'cancelled']
+const TERMINAL_STATES = new Set<JobState>(['succeeded', 'failed', 'cancelled'])
 
 export function isTerminal(state: JobState): boolean {
-  return TERMINAL_STATES.includes(state)
+  return TERMINAL_STATES.has(state)
 }
 
 export function expected(kind: ErrorKind, message: string): JobOperationOutput {
@@ -118,7 +119,7 @@ export function errorMessage(error: unknown): string {
 }
 
 export function cellKey(sessionID: SessionId, language: Language): string {
-  return `${String(sessionID)}\0${language}`
+  return `${sessionID}\0${language}`
 }
 
 export function isSameCell(map: Map<string, Cell>, cell: Cell): boolean {

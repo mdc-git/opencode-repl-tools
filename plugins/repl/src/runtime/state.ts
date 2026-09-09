@@ -4,6 +4,7 @@ import { PythonAdapter } from '../adapters/python.ts'
 import type { Language } from '../model.ts'
 import { OutputRing } from '../output-ring.ts'
 import {
+  SESSION_ID_KEY,
   TRANSCRIPT_BYTES,
   cellKey,
   errorMessage,
@@ -126,7 +127,7 @@ export class RuntimeState {
       return Effect.succeed(this.closedValidation())
     }
 
-    return this.ctx.session.get({ ['sessionID']: sessionID }).pipe(
+    return this.ctx.session.get({ [SESSION_ID_KEY]: sessionID }).pipe(
       Effect.map((session) => this.validateLocation(session)),
       Effect.catch((error) => Effect.succeed(this.lookupFailure(error)))
     )
@@ -135,7 +136,7 @@ export class RuntimeState {
   createCell(sessionID: SessionId, language: Language, directory: string): Effect.Effect<Cell> {
     return Scope.fork(this.activationScope).pipe(
       Effect.map((scope) => ({
-        ['sessionID']: sessionID,
+        [SESSION_ID_KEY]: sessionID,
         language,
         directory,
         transcript: new OutputRing(TRANSCRIPT_BYTES),

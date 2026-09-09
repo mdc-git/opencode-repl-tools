@@ -32,6 +32,7 @@ export type PythonBrokerEvent =
   | { readonly type: 'fatal'; readonly message: string }
   | { readonly type: 'shutdown'; readonly confirmed: boolean }
 
+const WAITING_INPUT = 'waiting_input' as const
 const outputStreams = new Set<OutputStream>(['stdout', 'stderr', 'display', 'system'])
 
 function outputStream(event: JsonRecord): OutputStream {
@@ -78,7 +79,7 @@ const decoders: Readonly<Record<string, (event: JsonRecord) => PythonBrokerEvent
     pythonVersion: stringValue(event, 'pythonVersion', 'Python ready event')
   }),
   output: decodeOutput,
-  ['waiting_input']: decodeWaitingInput,
+  [WAITING_INPUT]: decodeWaitingInput,
   done: decodeDone,
   fatal: (event) => ({
     type: 'fatal',

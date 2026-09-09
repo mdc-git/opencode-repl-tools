@@ -12,6 +12,10 @@ type StoredChunk = OutputChunk & {
   readonly isPartial: boolean
 }
 
+function isUtf8ContinuationByte(byte: number | undefined): boolean {
+  return byte !== undefined && byte >= 0x80 && byte <= 0xbf
+}
+
 function utf8Tail(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, 'utf8')
   if (buffer.length <= maxBytes) {
@@ -19,12 +23,7 @@ function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length) {
-    const byte = buffer[start]
-    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
-      break
-    }
-
+  while (isUtf8ContinuationByte(buffer[start])) {
     start += 1
   }
 
@@ -71,10 +70,6 @@ export class OutputRing {
     }
   }
 
-  get cursor(): number {
-    return this.nextCursor - 1
-  }
-
   private store(
     stream: OutputStream,
     text: string,
@@ -101,6 +96,10 @@ export class OutputRing {
         this.retainedBytes -= removed.bytes
       }
     }
+  }
+
+  get cursor(): number {
+    return this.nextCursor - 1
   }
 
   append(stream: OutputStream, text: string, jobId?: string): number {

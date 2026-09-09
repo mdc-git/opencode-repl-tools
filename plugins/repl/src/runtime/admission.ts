@@ -2,6 +2,7 @@ import { Effect, Scope } from 'effect'
 import type { JobOperationOutput, Language } from '../model.ts'
 import type { RuntimeState } from './state.ts'
 import {
+  SESSION_ID_KEY,
   cellKey,
   expected,
   isTerminal,
@@ -119,7 +120,7 @@ export function admitEvaluation(
       }
 
       const cell = yield* getOrCreateCell(state, map, {
-        ['sessionID']: context.sessionID,
+        [SESSION_ID_KEY]: context.sessionID,
         language,
         directory
       })

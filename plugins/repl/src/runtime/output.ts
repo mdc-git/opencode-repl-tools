@@ -2,6 +2,10 @@ import { Buffer } from 'node:buffer'
 import type { JobStatus, OutputChunk } from '../model.ts'
 import { PREVIEW_BYTES, type Cell, type Job } from './types.ts'
 
+function isUtf8ContinuationByte(byte: number | undefined): boolean {
+  return byte !== undefined && byte >= 0x80 && byte <= 0xbf
+}
+
 export function utf8Tail(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, 'utf8')
   if (buffer.length <= maxBytes) {
@@ -9,12 +13,7 @@ export function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length) {
-    const byte = buffer[start]
-    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
-      break
-    }
-
+  while (isUtf8ContinuationByte(buffer[start])) {
     start += 1
   }
 

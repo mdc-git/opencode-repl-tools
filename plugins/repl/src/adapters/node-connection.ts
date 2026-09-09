@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import type { ChildProcess } from 'node:child_process'
-import type { Readable, Writable } from 'node:stream'
+import { Readable, Writable } from 'node:stream'
 import { NdjsonDecoder, encodeNdjson } from '../ndjson.ts'
 import type { OutputStream } from '../model.ts'
 import { decodeNodeEvent, type NodeWorkerEvent } from './node-protocol.ts'
@@ -32,26 +32,16 @@ type NodeConnectionOptions = {
 }
 
 function readable(value: unknown, label: string): Readable {
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'on' in value &&
-    typeof value.on === 'function'
-  ) {
-    return value as Readable
+  if (value instanceof Readable) {
+    return value
   }
 
   throw new Error(`Node REPL ${label} pipe is unavailable`)
 }
 
 function writable(value: unknown, label: string): Writable {
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'write' in value &&
-    typeof value.write === 'function'
-  ) {
-    return value as Writable
+  if (value instanceof Writable) {
+    return value
   }
 
   throw new Error(`Node REPL ${label} pipe is unavailable`)
@@ -84,6 +74,7 @@ class NodeConnection implements NodeInterpreter {
     this.readyResolve = resolve
     this.readyReject = reject
   })
+
   readonly language = 'node' as const
 
   constructor(private readonly options: NodeConnectionOptions) {
@@ -253,6 +244,7 @@ class NodeConnection implements NodeInterpreter {
     const abortStartup = () => {
       this.cancelStartup()
     }
+
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
       const version = await this.ready

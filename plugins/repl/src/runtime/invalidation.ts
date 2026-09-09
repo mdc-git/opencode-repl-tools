@@ -2,7 +2,7 @@ import { Effect, Exit, Scope } from 'effect'
 import type { CleanupResult } from '../adapters/process-group.ts'
 import { safeRetry, safeShutdown } from './cleanup.ts'
 import type { RuntimeState } from './state.ts'
-import { isTerminal, type Cell } from './types.ts'
+import { SESSION_ID_KEY, isTerminal, type Cell } from './types.ts'
 
 function abortStartup(cell: Cell): void {
   if (cell.active?.startupAbort !== undefined) {
@@ -42,7 +42,7 @@ function warnCleanup(state: RuntimeState, cell: Cell, result: CleanupResult | un
   }
 
   return Effect.logWarning('REPL lifecycle cleanup could not be confirmed', {
-    ['sessionID']: cell.sessionID,
+    [SESSION_ID_KEY]: cell.sessionID,
     language: cell.language,
     error: result.message
   })

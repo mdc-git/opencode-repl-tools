@@ -17,6 +17,7 @@ const VERIFY_COMMAND = [
   '-c',
   'import importlib.metadata as m; assert m.version("ipykernel") == "7.3.0"; assert m.version("jupyter_client") == "8.10.0"'
 ] as const
+const VERSION_PATTERN = /^(?<major>\d+)\.(?<minor>\d+)/v
 
 type PythonVersion = {
   readonly major: number
@@ -29,10 +30,13 @@ type EnvironmentPaths = {
   readonly python: string
 }
 
+function versionPart(version: string, name: 'major' | 'minor'): string | undefined {
+  return VERSION_PATTERN.exec(version.trim())?.groups?.[name]
+}
+
 function parseVersion(version: string): PythonVersion | undefined {
-  const groups = /^(?<major>\d+)\.(?<minor>\d+)/v.exec(version.trim())?.groups
-  const major = groups?.major
-  const minor = groups?.minor
+  const major = versionPart(version, 'major')
+  const minor = versionPart(version, 'minor')
   if (major === undefined || minor === undefined) {
     return undefined
   }
@@ -258,7 +262,7 @@ export class PythonEnvironment {
     this.bootstrapAbort.abort()
     await this.bootstrapPromise?.catch(() => undefined)
     await Promise.allSettled(
-      [...this.temporaryRoots].map((item) => fs.rm(item, { recursive: true, force: true }))
+      [...this.temporaryRoots].map(async (item) => fs.rm(item, { recursive: true, force: true }))
     )
     this.temporaryRoots.clear()
   }

@@ -5,8 +5,12 @@ import type { Readable } from 'node:stream'
 import { killProcessGroup } from './process-group.ts'
 import { PythonStartupError } from './python-types.ts'
 
-const DIAGNOSTIC_BYTES = 16 * 1024
+const DIAGNOSTIC_BYTES = 16 * 1_024
 const KILL_WAIT_MS = 750
+
+function isUtf8ContinuationByte(byte: number | undefined): boolean {
+  return byte !== undefined && byte >= 0x80 && byte <= 0xbf
+}
 
 function utf8Tail(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, 'utf8')
@@ -15,12 +19,7 @@ function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length) {
-    const byte = buffer[start]
-    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
-      break
-    }
-
+  while (isUtf8ContinuationByte(buffer[start])) {
     start += 1
   }
 
@@ -126,6 +125,7 @@ class CommandCapture {
       const onAbort = () => {
         this.abort(reject)
       }
+
       this.signal.addEventListener('abort', onAbort, { once: true })
       this.child.once('error', (error) => {
         this.reject(reject, onAbort, error.message)
