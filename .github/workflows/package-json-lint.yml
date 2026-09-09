@@ -25,25 +25,77 @@ jobs:
         run: bun install
 
       - name: Check formatting
+        id: format
+        continue-on-error: true
         run: bun run format:check
 
       - name: Lint
+        id: lint
+        continue-on-error: true
         run: bun run lint
 
       - name: Typecheck
+        id: typecheck
+        continue-on-error: true
         run: bun run typecheck
 
       - name: Check workers
+        id: workers
+        continue-on-error: true
         run: bun run check:workers
 
       - name: Check dependency architecture
+        id: deps
+        continue-on-error: true
         run: bun run check:deps
 
       - name: Check unused code and dependencies
+        id: knip
+        continue-on-error: true
         run: bun run check:knip
 
       - name: Audit dependencies
+        id: audit
+        continue-on-error: true
         run: bun run audit
 
       - name: Pack package
+        id: pack
+        continue-on-error: true
         run: bun pm pack
+
+      - name: Fail if any validation gate failed
+        if: always()
+        env:
+          FORMAT_OUTCOME: ${{ steps.format.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          WORKERS_OUTCOME: ${{ steps.workers.outcome }}
+          DEPS_OUTCOME: ${{ steps.deps.outcome }}
+          KNIP_OUTCOME: ${{ steps.knip.outcome }}
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          PACK_OUTCOME: ${{ steps.pack.outcome }}
+        run: |
+          printf '%s\n' \
+            "format=$FORMAT_OUTCOME" \
+            "lint=$LINT_OUTCOME" \
+            "typecheck=$TYPECHECK_OUTCOME" \
+            "workers=$WORKERS_OUTCOME" \
+            "deps=$DEPS_OUTCOME" \
+            "knip=$KNIP_OUTCOME" \
+            "audit=$AUDIT_OUTCOME" \
+            "pack=$PACK_OUTCOME"
+          for outcome in \
+            "$FORMAT_OUTCOME" \
+            "$LINT_OUTCOME" \
+            "$TYPECHECK_OUTCOME" \
+            "$WORKERS_OUTCOME" \
+            "$DEPS_OUTCOME" \
+            "$KNIP_OUTCOME" \
+            "$AUDIT_OUTCOME" \
+            "$PACK_OUTCOME"
+          do
+            if [ "$outcome" != "success" ]; then
+              exit 1
+            fi
+          done
