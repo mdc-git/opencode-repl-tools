@@ -267,11 +267,3 @@ export class PythonEnvironment {
     this.temporaryRoots.clear()
   }
 }
-
-function parsePythonVersion(version: string): PythonVersion | undefined {
-  return parseVersion(version)
-}
-
-function isSupportedPython(version: PythonVersion | undefined): boolean {
-  return isSupportedVersion(version)
-}
