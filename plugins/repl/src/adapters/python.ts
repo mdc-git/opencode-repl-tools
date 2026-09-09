@@ -14,15 +14,16 @@ async function raceAbort<T>(promise: Promise<T>, signal: AbortSignal, message: s
     const onAbort = () => {
       reject(new Error(message))
     }
+
     signal.addEventListener('abort', onAbort, { once: true })
-    void promise.then(
-      (value) => {
+    void promise
+      .then((value) => {
         finish(resolve, signal, onAbort, value)
-      },
-      (error: unknown) => {
-        finish(reject, signal, onAbort, error)
-      }
-    )
+      })
+      .catch((error: unknown) => {
+        const failure = error instanceof Error ? error : new Error(errorMessage(error))
+        finish(reject, signal, onAbort, failure)
+      })
   })
 }
 

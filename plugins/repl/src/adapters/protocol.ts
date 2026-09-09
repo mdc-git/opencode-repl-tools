@@ -26,7 +26,7 @@ export function stringValue(record: JsonRecord, key: string, label: string): str
   return value
 }
 
-export function booleanValue(record: JsonRecord, key: string, label: string): boolean {
+export function isBooleanValue(record: JsonRecord, key: string, label: string): boolean {
   const value = record[key]
   if (typeof value !== 'boolean') {
     throw new TypeError(`${label}.${key} must be a boolean`)

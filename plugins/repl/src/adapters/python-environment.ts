@@ -30,15 +30,17 @@ type EnvironmentPaths = {
 }
 
 function parseVersion(version: string): PythonVersion | undefined {
-  const match = /^(\d+)\.(\d+)/v.exec(version.trim())
-  if (match === null) {
+  const groups = /^(?<major>\d+)\.(?<minor>\d+)/v.exec(version.trim())?.groups
+  const major = groups?.major
+  const minor = groups?.minor
+  if (major === undefined || minor === undefined) {
     return undefined
   }
 
-  return { major: Number(match[1]), minor: Number(match[2]) }
+  return { major: Number(major), minor: Number(minor) }
 }
 
-function supported(version: PythonVersion | undefined): version is PythonVersion {
+function isSupportedVersion(version: PythonVersion | undefined): version is PythonVersion {
   if (version === undefined) {
     return false
   }
@@ -72,7 +74,7 @@ function pathsFor(version: PythonVersion, requirementsSha: string): EnvironmentP
   return { root, venv, python: path.join(venv, 'bin', 'python') }
 }
 
-async function exists(filename: string): Promise<boolean> {
+async function doesFileExist(filename: string): Promise<boolean> {
   try {
     await fs.access(filename)
     return true
@@ -85,7 +87,7 @@ async function verifyEnvironment(python: string, signal: AbortSignal): Promise<v
   await captureCommand(python, VERIFY_COMMAND, signal)
 }
 
-function publishRace(code: unknown): boolean {
+function isPublishRace(code: unknown): boolean {
   return code === 'EEXIST' || code === 'ENOTEMPTY'
 }
 
@@ -97,7 +99,7 @@ async function copyPublished(temporaryVenv: string, finalVenv: string): Promise<
     try {
       await fs.rename(staging, finalVenv)
     } catch (error) {
-      if (!publishRace(errorCode(error))) {
+      if (!isPublishRace(errorCode(error))) {
         throw error
       }
     }
@@ -106,20 +108,29 @@ async function copyPublished(temporaryVenv: string, finalVenv: string): Promise<
   }
 }
 
+async function publishFallback(
+  error: unknown,
+  temporaryVenv: string,
+  finalVenv: string
+): Promise<void> {
+  const code = errorCode(error)
+  if (isPublishRace(code)) {
+    return
+  }
+
+  if (code === 'EXDEV') {
+    await copyPublished(temporaryVenv, finalVenv)
+    return
+  }
+
+  throw error
+}
+
 async function publish(temporaryVenv: string, finalVenv: string): Promise<void> {
   try {
     await fs.rename(temporaryVenv, finalVenv)
   } catch (error) {
-    const code = errorCode(error)
-    if (publishRace(code)) {
-      return
-    }
-
-    if (code !== 'EXDEV') {
-      throw error
-    }
-
-    await copyPublished(temporaryVenv, finalVenv)
+    await publishFallback(error, temporaryVenv, finalVenv)
   }
 }
 
@@ -130,22 +141,6 @@ export class PythonEnvironment {
   private readonly temporaryRoots = new Set<string>()
 
   constructor(private readonly configuredPython: string) {}
-
-  async ensure(): Promise<string> {
-    if (this.readyPython !== undefined) {
-      return this.readyPython
-    }
-
-    if (this.bootstrapPromise !== undefined) {
-      return this.bootstrapPromise
-    }
-
-    this.bootstrapPromise = this.build(this.bootstrapAbort.signal).then(
-      (python) => this.remember(python),
-      (error) => this.clearFailure(error)
-    )
-    return this.bootstrapPromise
-  }
 
   private remember(python: string): string {
     this.readyPython = python
@@ -162,8 +157,9 @@ export class PythonEnvironment {
   ): Promise<{ version: PythonVersion; tail: string }> {
     const result = await captureCommand(this.configuredPython, VERSION_COMMAND, signal)
     const version = parseVersion(result.stdout)
-    if (!supported(version)) {
-      const reported = result.stdout.trim() || 'an unknown version'
+    if (!isSupportedVersion(version)) {
+      const output = result.stdout.trim()
+      const reported = output === '' ? 'an unknown version' : output
       throw new PythonStartupError(
         `Python REPL requires Python >= 3.10; configured executable reported ${reported}`,
         result.tail
@@ -179,7 +175,7 @@ export class PythonEnvironment {
     const sha = crypto.createHash('sha256').update(requirements).digest('hex')
     const paths = pathsFor(version, sha)
     await fs.mkdir(paths.root, { recursive: true })
-    if (await exists(paths.python)) {
+    if (await doesFileExist(paths.python)) {
       return this.useCached(paths, signal)
     }
 
@@ -243,11 +239,26 @@ export class PythonEnvironment {
     await fs.rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined)
   }
 
+  async ensure(): Promise<string> {
+    if (this.readyPython !== undefined) {
+      return this.readyPython
+    }
+
+    if (this.bootstrapPromise !== undefined) {
+      return this.bootstrapPromise
+    }
+
+    this.bootstrapPromise = this.build(this.bootstrapAbort.signal)
+      .then((python) => this.remember(python))
+      .catch((error: unknown) => this.clearFailure(error))
+    return this.bootstrapPromise
+  }
+
   async close(): Promise<void> {
     this.bootstrapAbort.abort()
     await this.bootstrapPromise?.catch(() => undefined)
     await Promise.allSettled(
-      [...this.temporaryRoots].map(async (item) => fs.rm(item, { recursive: true, force: true }))
+      [...this.temporaryRoots].map((item) => fs.rm(item, { recursive: true, force: true }))
     )
     this.temporaryRoots.clear()
   }
@@ -258,5 +269,5 @@ export function parsePythonVersion(version: string): PythonVersion | undefined {
 }
 
 export function isSupportedPython(version: PythonVersion | undefined): boolean {
-  return supported(version)
+  return isSupportedVersion(version)
 }

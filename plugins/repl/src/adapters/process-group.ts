@@ -22,7 +22,7 @@ function errorCode(error: unknown): unknown {
   return error.code
 }
 
-function groupExists(pid: number): boolean {
+function isGroupPresent(pid: number): boolean {
   try {
     process.kill(-pid, 0)
     return true
@@ -31,25 +31,22 @@ function groupExists(pid: number): boolean {
   }
 }
 
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
+async function isGroupGoneAfterWait(pid: number, durationMs: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + durationMs
+    const timer = setInterval(() => {
+      if (!isGroupPresent(pid)) {
+        clearInterval(timer)
+        resolve(true)
+        return
+      }
 
-async function waitUntilGone(pid: number, deadline: number): Promise<boolean> {
-  if (!groupExists(pid)) {
-    return true
-  }
-
-  if (Date.now() >= deadline) {
-    return false
-  }
-
-  await sleep(25)
-  return waitUntilGone(pid, deadline)
-}
-
-async function waitGroupGone(pid: number, durationMs: number): Promise<boolean> {
-  return waitUntilGone(pid, Date.now() + durationMs)
+      if (Date.now() >= deadline) {
+        clearInterval(timer)
+        resolve(false)
+      }
+    }, 25)
+  })
 }
 
 export function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
@@ -72,12 +69,12 @@ function runOrderly(orderly: (() => void) | undefined): void {
 
 async function forceRetire(pid: number, options: RetireOptions): Promise<CleanupResult> {
   signalProcessGroup(pid, 'SIGTERM')
-  if (await waitGroupGone(pid, options.termWaitMs)) {
+  if (await isGroupGoneAfterWait(pid, options.termWaitMs)) {
     return { confirmed: true }
   }
 
   signalProcessGroup(pid, 'SIGKILL')
-  if (await waitGroupGone(pid, options.killWaitMs)) {
+  if (await isGroupGoneAfterWait(pid, options.killWaitMs)) {
     return { confirmed: true }
   }
 
@@ -96,12 +93,12 @@ export async function retireProcessGroup(
     return { confirmed: true }
   }
 
-  if (!groupExists(pid)) {
+  if (!isGroupPresent(pid)) {
     return { confirmed: true }
   }
 
   runOrderly(options.orderly)
-  if (await waitGroupGone(pid, options.orderlyWaitMs)) {
+  if (await isGroupGoneAfterWait(pid, options.orderlyWaitMs)) {
     return { confirmed: true }
   }
 
@@ -115,5 +112,5 @@ export async function killProcessGroup(child: ChildProcess, waitMs: number): Pro
   }
 
   signalProcessGroup(pid, 'SIGKILL')
-  await waitGroupGone(pid, waitMs)
+  await isGroupGoneAfterWait(pid, waitMs)
 }

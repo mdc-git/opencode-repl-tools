@@ -9,7 +9,7 @@ export type OutputRead = {
 
 type StoredChunk = OutputChunk & {
   readonly bytes: number
-  readonly partial: boolean
+  readonly isPartial: boolean
 }
 
 function utf8Tail(text: string, maxBytes: number): string {
@@ -19,7 +19,12 @@ function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
+  while (start < buffer.length) {
+    const byte = buffer[start]
+    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
+      break
+    }
+
     start += 1
   }
 
@@ -27,7 +32,7 @@ function utf8Tail(text: string, maxBytes: number): string {
 }
 
 function publicChunk(chunk: StoredChunk): OutputChunk {
-  const { bytes: _bytes, partial: _partial, ...result } = chunk
+  const { bytes: _bytes, isPartial: _isPartial, ...result } = chunk
   return result
 }
 
@@ -39,12 +44,12 @@ function normalizeCursor(cursor: number): number {
   return Math.max(cursor, 0)
 }
 
-function readWasTruncated(
+function isReadTruncated(
   first: StoredChunk | undefined,
   selectedFirst: StoredChunk | undefined,
   cursor: number
 ): boolean {
-  if (selectedFirst?.partial === true) {
+  if (selectedFirst?.isPartial === true) {
     return true
   }
 
@@ -70,27 +75,19 @@ export class OutputRing {
     return this.nextCursor - 1
   }
 
-  append(stream: OutputStream, text: string, jobId?: string): number {
-    if (text.length === 0) {
-      return this.cursor
-    }
-
-    const bytes = Buffer.byteLength(text, 'utf8')
-    const isPartial = bytes > this.maxBytes
-    const retained = isPartial ? utf8Tail(text, this.maxBytes) : text
-    const chunk = this.store(stream, retained, isPartial, jobId)
-    this.evict()
-    return chunk.cursor
-  }
-
-  private store(stream: OutputStream, text: string, partial: boolean, jobId?: string): StoredChunk {
+  private store(
+    stream: OutputStream,
+    text: string,
+    isPartial: boolean,
+    jobId?: string
+  ): StoredChunk {
     const chunk: StoredChunk = {
       cursor: this.nextCursor++,
       stream,
       text,
       ...(jobId !== undefined && { jobId }),
       bytes: Buffer.byteLength(text, 'utf8'),
-      partial
+      isPartial
     }
     this.chunks.push(chunk)
     this.retainedBytes += chunk.bytes
@@ -106,13 +103,26 @@ export class OutputRing {
     }
   }
 
+  append(stream: OutputStream, text: string, jobId?: string): number {
+    if (text.length === 0) {
+      return this.cursor
+    }
+
+    const bytes = Buffer.byteLength(text, 'utf8')
+    const isPartial = bytes > this.maxBytes
+    const retained = isPartial ? utf8Tail(text, this.maxBytes) : text
+    const chunk = this.store(stream, retained, isPartial, jobId)
+    this.evict()
+    return chunk.cursor
+  }
+
   read(afterCursor: number): OutputRead {
     const cursor = normalizeCursor(afterCursor)
     const selected = this.chunks.filter((chunk) => chunk.cursor > cursor)
     return {
       cursor: this.cursor,
-      truncated: readWasTruncated(this.chunks[0], selected[0], cursor),
-      chunks: selected.map(publicChunk)
+      truncated: isReadTruncated(this.chunks[0], selected[0], cursor),
+      chunks: selected.map((chunk) => publicChunk(chunk))
     }
   }
 }

@@ -40,7 +40,6 @@ async function retirement(
 }
 
 export class PythonConnection implements PythonInterpreter {
-  readonly language = 'python' as const
   private readonly decoder = new NdjsonDecoder<PythonBrokerEvent>(decodePythonEvent)
   private pending: PendingEval | undefined
   private activeJobId: string | undefined
@@ -56,6 +55,7 @@ export class PythonConnection implements PythonInterpreter {
     this.readyResolve = resolve
     this.readyReject = reject
   })
+  readonly language = 'python' as const
 
   constructor(private readonly options: PythonConnectionOptions) {
     options.child.stdout.on('data', (chunk) => {
@@ -68,7 +68,7 @@ export class PythonConnection implements PythonInterpreter {
       this.fatal(error.message)
     })
     options.child.once('exit', (code, signal) => {
-      this.onExit(code, signal)
+      this.onExit(code ?? undefined, signal ?? undefined)
     })
   }
 
@@ -197,7 +197,7 @@ export class PythonConnection implements PythonInterpreter {
           this.clearPending()
         }
 
-        reject(error)
+        reject(error instanceof Error ? error : new Error(errorMessage(error)))
       })
     })
   }
@@ -293,10 +293,10 @@ export class PythonConnection implements PythonInterpreter {
 
     await new Promise<void>((resolve, reject) => {
       this.options.child.stdin.write(encodeNdjson(message), (error) => {
-        if (error) {
-          reject(error)
-        } else {
+        if (error === null || error === undefined) {
           resolve()
+        } else {
+          reject(error)
         }
       })
     })

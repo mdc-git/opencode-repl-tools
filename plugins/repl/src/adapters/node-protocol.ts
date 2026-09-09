@@ -1,5 +1,5 @@
 import {
-  booleanValue,
+  isBooleanValue,
   protocolError,
   recordValue,
   stringValue,
@@ -47,7 +47,7 @@ function decodeDone(event: JsonRecord): NodeWorkerEvent {
   return {
     type: 'done',
     jobId: stringValue(event, 'jobId', 'Node done event'),
-    ok: booleanValue(event, 'ok', 'Node done event'),
+    ok: isBooleanValue(event, 'ok', 'Node done event'),
     ...(error !== undefined && { error })
   }
 }

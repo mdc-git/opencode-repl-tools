@@ -32,7 +32,12 @@ type NodeConnectionOptions = {
 }
 
 function readable(value: unknown, label: string): Readable {
-  if (value && typeof (value as Readable).on === 'function') {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'on' in value &&
+    typeof value.on === 'function'
+  ) {
     return value as Readable
   }
 
@@ -40,7 +45,12 @@ function readable(value: unknown, label: string): Readable {
 }
 
 function writable(value: unknown, label: string): Writable {
-  if (value && typeof (value as Writable).write === 'function') {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'write' in value &&
+    typeof value.write === 'function'
+  ) {
     return value as Writable
   }
 
@@ -48,8 +58,8 @@ function writable(value: unknown, label: string): Writable {
 }
 
 function nodeMajor(version: string): number | undefined {
-  const match = /^v?(\d+)(?:\.|$)/v.exec(version)
-  return match ? Number(match[1]) : undefined
+  const major = /^v?(?<major>\d+)(?:\.|$)/v.exec(version)?.groups?.major
+  return major === undefined ? undefined : Number(major)
 }
 
 function chunkText(chunk: unknown): string {
@@ -61,7 +71,6 @@ async function retirement(child: ChildProcess, orderly?: () => void): Promise<Cl
 }
 
 class NodeConnection implements NodeInterpreter {
-  readonly language = 'node' as const
   private readonly decoder = new NdjsonDecoder<NodeWorkerEvent>(decodeNodeEvent)
   private pending: PendingEval | undefined
   private activeJobId: string | undefined
@@ -75,6 +84,7 @@ class NodeConnection implements NodeInterpreter {
     this.readyResolve = resolve
     this.readyReject = reject
   })
+  readonly language = 'node' as const
 
   constructor(private readonly options: NodeConnectionOptions) {
     this.bindStreams()
@@ -98,7 +108,7 @@ class NodeConnection implements NodeInterpreter {
       this.fatal(error.message)
     })
     this.options.child.once('exit', (code, signal) => {
-      this.onExit(code, signal)
+      this.onExit(code ?? undefined, signal ?? undefined)
     })
   }
 
@@ -181,6 +191,64 @@ class NodeConnection implements NodeInterpreter {
     }
   }
 
+  private cancelStartup(): void {
+    if (this.closed) {
+      return
+    }
+
+    this.shutdownRequested = true
+    this.readyReject(new Error('Node REPL startup was cancelled'))
+    void retirement(this.options.child)
+  }
+
+  private isPending(jobId: string): boolean {
+    const { pending } = this
+    return pending?.jobId === jobId
+  }
+
+  private clearPending(): void {
+    this.pending = undefined
+    this.activeJobId = undefined
+  }
+
+  private assertActive(jobId: string): void {
+    if (this.closed || this.activeJobId !== jobId) {
+      throw new Error(`job ${jobId} is not the active Node evaluation`)
+    }
+  }
+
+  private requestShutdown(): void {
+    if (!this.closed && !this.options.control.destroyed) {
+      this.options.control.write(encodeNdjson({ type: 'shutdown' }))
+    }
+  }
+
+  private finishShutdown(result: CleanupResult): CleanupResult {
+    if (result.confirmed) {
+      this.closed = true
+    } else {
+      this.shutdownPromise = undefined
+    }
+
+    return result
+  }
+
+  private async sendControl(message: unknown): Promise<void> {
+    if (this.closed) {
+      throw new Error('Node REPL worker is closed')
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      this.options.control.write(encodeNdjson(message), (error) => {
+        if (error === null || error === undefined) {
+          resolve()
+        } else {
+          reject(error)
+        }
+      })
+    })
+  }
+
   async waitUntilReady(signal: AbortSignal): Promise<void> {
     const abortStartup = () => {
       this.cancelStartup()
@@ -195,16 +263,6 @@ class NodeConnection implements NodeInterpreter {
     } finally {
       signal.removeEventListener('abort', abortStartup)
     }
-  }
-
-  private cancelStartup(): void {
-    if (this.closed) {
-      return
-    }
-
-    this.shutdownRequested = true
-    this.readyReject(new Error('Node REPL startup was cancelled'))
-    void retirement(this.options.child)
   }
 
   async evaluate(jobId: string, code: string): Promise<NodeEvalResult> {
@@ -224,26 +282,20 @@ class NodeConnection implements NodeInterpreter {
           this.clearPending()
         }
 
-        reject(error)
+        reject(error instanceof Error ? error : new Error(errorMessage(error)))
       })
     })
-  }
-
-  private isPending(jobId: string): boolean {
-    const { pending } = this
-    return pending?.jobId === jobId
-  }
-
-  private clearPending(): void {
-    this.pending = undefined
-    this.activeJobId = undefined
   }
 
   async stdin(jobId: string, data: string): Promise<void> {
     this.assertActive(jobId)
     await new Promise<void>((resolve, reject) => {
       this.options.stdin.write(data, (error) => {
-        error ? reject(error) : resolve()
+        if (error === null || error === undefined) {
+          resolve()
+        } else {
+          reject(error)
+        }
       })
     })
   }
@@ -256,12 +308,6 @@ class NodeConnection implements NodeInterpreter {
     }
 
     signalProcessGroup(pid, 'SIGINT')
-  }
-
-  private assertActive(jobId: string): void {
-    if (this.closed || this.activeJobId !== jobId) {
-      throw new Error(`job ${jobId} is not the active Node evaluation`)
-    }
   }
 
   async shutdown(): Promise<CleanupResult> {
@@ -277,41 +323,9 @@ class NodeConnection implements NodeInterpreter {
     return this.shutdownPromise
   }
 
-  private requestShutdown(): void {
-    if (!this.closed && !this.options.control.destroyed) {
-      this.options.control.write(encodeNdjson({ type: 'shutdown' }))
-    }
-  }
-
-  private finishShutdown(result: CleanupResult): CleanupResult {
-    if (result.confirmed) {
-      this.closed = true
-    } else {
-      this.shutdownPromise = undefined
-    }
-
-    return result
-  }
-
   alive(): boolean {
     const { child } = this.options
     return !this.closed && child.exitCode === null && child.signalCode === null
-  }
-
-  private async sendControl(message: unknown): Promise<void> {
-    if (this.closed) {
-      throw new Error('Node REPL worker is closed')
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      this.options.control.write(encodeNdjson(message), (error) => {
-        if (error) {
-          reject(error)
-        } else {
-          resolve()
-        }
-      })
-    })
   }
 }
 

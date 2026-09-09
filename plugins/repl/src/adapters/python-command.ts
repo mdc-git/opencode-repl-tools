@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
 import { spawn, type ChildProcess } from 'node:child_process'
-import type { Readable } from 'node:stream'
 import process from 'node:process'
+import type { Readable } from 'node:stream'
 import { killProcessGroup } from './process-group.ts'
 import { PythonStartupError } from './python-types.ts'
 
@@ -15,7 +15,12 @@ function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
+  while (start < buffer.length) {
+    const byte = buffer[start]
+    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
+      break
+    }
+
     start += 1
   }
 
@@ -31,7 +36,7 @@ function chunkText(chunk: unknown): string {
 }
 
 function bindData(stream: Readable | undefined, handler: (chunk: unknown) => void): void {
-  if (stream !== null) {
+  if (stream !== undefined) {
     stream.on('data', handler)
   }
 }
@@ -46,28 +51,11 @@ class CommandCapture {
     private readonly child: ChildProcess,
     private readonly signal: AbortSignal
   ) {
-    bindData(child.stdout, (chunk) => {
+    bindData(child.stdout ?? undefined, (chunk) => {
       this.onStdout(chunk)
     })
-    bindData(child.stderr, (chunk) => {
+    bindData(child.stderr ?? undefined, (chunk) => {
       this.onStderr(chunk)
-    })
-  }
-
-  async run(): Promise<{ stdout: string; tail: string }> {
-    return new Promise((resolve, reject) => {
-      const onAbort = () => {
-        this.abort(reject)
-      }
-      this.signal.addEventListener('abort', onAbort, { once: true })
-      this.child.once('error', (error) => {
-        this.reject(reject, onAbort, error.message)
-      })
-      this.child.once('exit', (code, exitSignal) => {
-        if (!this.aborting) {
-          this.onExit({ resolve, reject, onAbort, code, exitSignal })
-        }
-      })
     })
   }
 
@@ -83,14 +71,13 @@ class CommandCapture {
 
   private abort(reject: (reason: Error) => void): void {
     this.aborting = true
-    void killProcessGroup(this.child, KILL_WAIT_MS).then(
-      () => {
+    void killProcessGroup(this.child, KILL_WAIT_MS)
+      .then(() => {
         this.finishCancelled(reject)
-      },
-      () => {
+      })
+      .catch(() => {
         this.finishCancelled(reject)
-      }
-    )
+      })
   }
 
   private finishCancelled(reject: (reason: Error) => void): void {
@@ -132,6 +119,29 @@ class CommandCapture {
 
     this.settled = true
     action()
+  }
+
+  async run(): Promise<{ stdout: string; tail: string }> {
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        this.abort(reject)
+      }
+      this.signal.addEventListener('abort', onAbort, { once: true })
+      this.child.once('error', (error) => {
+        this.reject(reject, onAbort, error.message)
+      })
+      this.child.once('exit', (code, exitSignal) => {
+        if (!this.aborting) {
+          this.onExit({
+            resolve,
+            reject,
+            onAbort,
+            code: code ?? undefined,
+            exitSignal: exitSignal ?? undefined
+          })
+        }
+      })
+    })
   }
 }
 

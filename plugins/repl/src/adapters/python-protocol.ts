@@ -1,6 +1,6 @@
 import type { OutputStream } from '../model.ts'
 import {
-  booleanValue,
+  isBooleanValue,
   optionalStringValue,
   protocolError,
   recordValue,
@@ -58,7 +58,7 @@ function decodeWaitingInput(event: JsonRecord): PythonBrokerEvent {
     type: 'waiting_input',
     jobId: stringValue(event, 'jobId', 'Python input event'),
     prompt: stringValue(event, 'prompt', 'Python input event'),
-    password: booleanValue(event, 'password', 'Python input event')
+    password: isBooleanValue(event, 'password', 'Python input event')
   }
 }
 
@@ -67,7 +67,7 @@ function decodeDone(event: JsonRecord): PythonBrokerEvent {
   return {
     type: 'done',
     jobId: stringValue(event, 'jobId', 'Python done event'),
-    ok: booleanValue(event, 'ok', 'Python done event'),
+    ok: isBooleanValue(event, 'ok', 'Python done event'),
     ...(error !== undefined && { error })
   }
 }
@@ -78,7 +78,7 @@ const decoders: Readonly<Record<string, (event: JsonRecord) => PythonBrokerEvent
     pythonVersion: stringValue(event, 'pythonVersion', 'Python ready event')
   }),
   output: decodeOutput,
-  waiting_input: decodeWaitingInput,
+  ['waiting_input']: decodeWaitingInput,
   done: decodeDone,
   fatal: (event) => ({
     type: 'fatal',
@@ -86,7 +86,7 @@ const decoders: Readonly<Record<string, (event: JsonRecord) => PythonBrokerEvent
   }),
   shutdown: (event) => ({
     type: 'shutdown',
-    confirmed: booleanValue(event, 'confirmed', 'Python shutdown event')
+    confirmed: isBooleanValue(event, 'confirmed', 'Python shutdown event')
   })
 }
 
