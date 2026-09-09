@@ -1,0 +1,35 @@
+{
+  "name": "opencode-repl-tools",
+  "private": true,
+  "type": "module",
+  "exports": "./plugins/repl/index.ts",
+  "sideEffects": false,
+  "scripts": {
+    "audit": "bun audit",
+    "check:deps": "depcruise --config .dependency-cruiser.mjs plugins/repl",
+    "check:knip": "knip",
+    "check:workers": "node --check plugins/repl/workers/node-repl.mjs && python3 -m py_compile plugins/repl/workers/python-kernel.py",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "plugins"
+  ],
+  "dependencies": {
+    "@opencode/plugin": "beta",
+    "effect": "4.0.0-rc.112",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "dependency-cruiser": "^18.2.0",
+    "eslint": "^10.10.0",
+    "eslint-config-xo": "^2.0.0",
+    "eslint-plugin-boundaries": "^7.2.0",
+    "eslint-plugin-sonarjs": "^4.2.0",
+    "knip": "^6.35.0",
+    "prettier": "^3.9.6"
+  }
+}

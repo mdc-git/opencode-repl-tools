@@ -1,0 +1,17 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    ".opencode/index.ts",
+    "plugins/repl/index.ts",
+    "plugins/repl/workers/node-repl.mjs",
+    "eslint.config.js",
+    ".dependency-cruiser.mjs"
+  ],
+  "project": [
+    ".opencode/**/*.ts",
+    "plugins/repl/**/*.ts",
+    "plugins/repl/workers/**/*.mjs",
+    "eslint.config.js",
+    ".dependency-cruiser.mjs"
+  ]
+}
