@@ -5,7 +5,6 @@ export class PythonStartupError extends Error {
   constructor(
     message: string,
     readonly diagnosticTail?: string,
-    readonly isCleanupConfirmed?: boolean,
     readonly retryCleanup?: () => Promise<CleanupResult>
   ) {
     super(message)
