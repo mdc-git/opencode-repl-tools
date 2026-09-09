@@ -67,8 +67,7 @@ type CellRequest = {
 }
 
 type AdmissionResult =
-  | { readonly error: JobOperationOutput }
-  | { readonly cell: Cell; readonly job: Job }
+  { readonly error: JobOperationOutput } | { readonly cell: Cell; readonly job: Job }
 
 function getOrCreateCell(
   state: RuntimeState,

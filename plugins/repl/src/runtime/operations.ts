@@ -302,7 +302,11 @@ function takeSessionCells(map: Map<string, Cell>, sessionID: ToolCallContext['se
 }
 
 export function takeAllCells(map: Map<string, Cell>): Cell[] {
-  const values = map.values().toArray()
+  const values: Cell[] = []
+  for (const cell of map.values()) {
+    values.push(cell)
+  }
+
   map.clear()
   for (const cell of values) {
     cell.notificationsSuppressed = true

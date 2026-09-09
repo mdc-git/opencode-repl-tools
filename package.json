@@ -18,9 +18,6 @@
   "files": [
     "plugins"
   ],
-  "overrides": {
-    "@opentelemetry/core": "2.8.0"
-  },
   "dependencies": {
     "@opencode/plugin": "beta",
     "effect": "4.0.0-rc.112",
@@ -35,5 +32,8 @@
     "eslint-plugin-sonarjs": "^4.2.0",
     "knip": "^6.35.0",
     "prettier": "^3.9.6"
+  },
+  "overrides": {
+    "@opentelemetry/core": "2.8.0"
   }
 }

@@ -2,7 +2,14 @@ import { Effect } from 'effect'
 import { safeShutdown } from './cleanup.ts'
 import { notifyTerminal } from './notifications.ts'
 import type { RuntimeState } from './state.ts'
-import { finishJob, isSameCell, isTerminal, type Cell, type Interpreter, type Job } from './types.ts'
+import {
+  finishJob,
+  isSameCell,
+  isTerminal,
+  type Cell,
+  type Interpreter,
+  type Job
+} from './types.ts'
 
 type FatalPreparation = {
   readonly interpreter: Interpreter

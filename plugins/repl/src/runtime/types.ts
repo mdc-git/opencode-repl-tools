@@ -15,11 +15,11 @@ import type {
 } from '../model.ts'
 import type { OutputRing } from '../output-ring.ts'
 
-export const TRANSCRIPT_BYTES = 1_024 * 1_024
+export const TRANSCRIPT_BYTES = 1024 * 1024
 const HISTORY_LIMIT = 20
-export const PREVIEW_BYTES = 16 * 1_024
-export const FOREGROUND_MS = 5_000
-export const CANCEL_GRACE_MS = 2_000
+export const PREVIEW_BYTES = 16 * 1024
+export const FOREGROUND_MS = 5000
+export const CANCEL_GRACE_MS = 2000
 export const SESSION_ID_KEY = 'sessionID' as const
 
 export type SessionId = Parameters<Plugin.Context['session']['get']>[0]['sessionID']

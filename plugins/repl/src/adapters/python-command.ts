@@ -5,7 +5,7 @@ import type { Readable } from 'node:stream'
 import { killProcessGroup } from './process-group.ts'
 import { PythonStartupError } from './python-types.ts'
 
-const DIAGNOSTIC_BYTES = 16 * 1_024
+const DIAGNOSTIC_BYTES = 16 * 1024
 const KILL_WAIT_MS = 750
 
 function isUtf8ContinuationByte(byte: number | undefined): boolean {

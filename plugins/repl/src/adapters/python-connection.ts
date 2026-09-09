@@ -55,6 +55,7 @@ export class PythonConnection implements PythonInterpreter {
     this.readyResolve = resolve
     this.readyReject = reject
   })
+
   readonly language = 'python' as const
 
   constructor(private readonly options: PythonConnectionOptions) {
@@ -244,6 +245,7 @@ export class PythonConnection implements PythonInterpreter {
     const abortStartup = () => {
       this.cancelStartup()
     }
+
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
       return await this.ready
