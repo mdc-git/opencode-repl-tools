@@ -1,6 +1,6 @@
 import { errorMessage } from './protocol.ts'
 import { type PythonConnection, spawnPythonConnection } from './python/connection.ts'
-import { PythonEnvironment, isSupportedPython, parsePythonVersion } from './python/environment.ts'
+import { PythonEnvironment } from './python/environment.ts'
 import { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python/types.ts'
 
 export { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python/types.ts'
@@ -37,16 +37,6 @@ function finish<T>(
   resolve(value)
 }
 
-function assertSupportedVersion(versionText: string): void {
-  if (isSupportedPython(parsePythonVersion(versionText))) {
-    return
-  }
-
-  throw new PythonStartupError(
-    `Python REPL requires Python >= 3.10; broker reported ${versionText}`
-  )
-}
-
 async function failReady(connection: PythonConnection, error: unknown): Promise<never> {
   const cleanup = await connection.shutdown()
   if (cleanup.confirmed) {
@@ -55,7 +45,7 @@ async function failReady(connection: PythonConnection, error: unknown): Promise<
 
   const message = errorMessage(error)
   const tail = error instanceof PythonStartupError ? error.diagnosticTail : undefined
-  throw new PythonStartupError(message, tail, false, async () => connection.shutdown())
+  throw new PythonStartupError(message, tail, async () => connection.shutdown())
 }
 
 async function readyConnection(
@@ -63,8 +53,7 @@ async function readyConnection(
   signal: AbortSignal
 ): Promise<PythonInterpreter> {
   try {
-    const versionText = await connection.waitUntilReady(signal)
-    assertSupportedVersion(versionText)
+    await connection.waitUntilReady(signal)
     return connection
   } catch (error) {
     return failReady(connection, error)
