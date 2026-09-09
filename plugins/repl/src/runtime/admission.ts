@@ -1,4 +1,4 @@
-import { Effect, Scope } from 'effect'
+import { Effect } from 'effect'
 import type { JobOperationOutput, Language } from '../model.ts'
 import type { RuntimeState } from './state.ts'
 import {
@@ -85,21 +85,6 @@ function getOrCreateCell(
     .pipe(Effect.tap((cell) => Effect.sync(() => map.set(key, cell))))
 }
 
-function ensureCellScope(state: RuntimeState, cell: Cell): Effect.Effect<void> {
-  if (cell.scope.state._tag !== 'Closed') {
-    return Effect.void
-  }
-
-  return Scope.fork(state.activationScope).pipe(
-    Effect.tap((scope) =>
-      Effect.sync(() => {
-        cell.scope = scope
-      })
-    ),
-    Effect.asVoid
-  )
-}
-
 export function admitEvaluation(
   state: RuntimeState,
   language: Language,
@@ -123,7 +108,6 @@ export function admitEvaluation(
         language,
         directory
       })
-      yield* ensureCellScope(state, cell)
       return { cell, job: prepareJob(cell, language) }
     })
   )
