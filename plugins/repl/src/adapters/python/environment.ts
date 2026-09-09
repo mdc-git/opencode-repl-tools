@@ -4,11 +4,11 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { captureCommand } from './python-command.ts'
-import { PythonStartupError } from './python-types.ts'
-import { errorMessage } from './protocol.ts'
+import { errorMessage } from '../protocol.ts'
+import { captureCommand } from './command.ts'
+import { PythonStartupError } from './types.ts'
 
-const requirementsPath = fileURLToPath(new URL('../../requirements.txt', import.meta.url))
+const requirementsPath = fileURLToPath(new URL('../../../requirements.txt', import.meta.url))
 const VERSION_COMMAND = [
   '-c',
   "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"

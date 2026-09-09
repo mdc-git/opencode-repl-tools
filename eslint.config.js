@@ -114,7 +114,7 @@ const config = defineConfig([
           category: 'core'
         },
         { pattern: 'plugins/repl/src/model.ts', category: 'contracts' },
-        { pattern: 'plugins/repl/src/adapters/*.ts', category: 'adapter' },
+        { pattern: 'plugins/repl/src/adapters/**/*.ts', category: 'adapter' },
         { pattern: 'plugins/repl/src/ndjson.ts', category: 'utils' },
         { pattern: 'plugins/repl/workers/*.mjs', category: 'worker' }
       ]

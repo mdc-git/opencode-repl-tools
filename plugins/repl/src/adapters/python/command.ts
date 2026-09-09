@@ -2,8 +2,8 @@ import { Buffer } from 'node:buffer'
 import { spawn, type ChildProcess } from 'node:child_process'
 import process from 'node:process'
 import type { Readable } from 'node:stream'
-import { killProcessGroup } from './process-group.ts'
-import { PythonStartupError } from './python-types.ts'
+import { killProcessGroup } from '../process-group.ts'
+import { PythonStartupError } from './types.ts'
 
 const DIAGNOSTIC_BYTES = 16 * 1024
 const KILL_WAIT_MS = 750

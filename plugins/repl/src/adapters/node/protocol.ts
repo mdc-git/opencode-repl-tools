@@ -5,7 +5,7 @@ import {
   stringValue,
   type JsonRecord,
   type ProtocolError
-} from './protocol.ts'
+} from '../protocol.ts'
 
 export type NodeWorkerEvent =
   | { readonly type: 'ready'; readonly nodeVersion: string }

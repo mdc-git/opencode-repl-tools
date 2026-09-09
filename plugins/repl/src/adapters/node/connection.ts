@@ -1,12 +1,12 @@
 import { Buffer } from 'node:buffer'
 import type { ChildProcess } from 'node:child_process'
 import { Readable, Writable } from 'node:stream'
-import { NdjsonDecoder, encodeNdjson } from '../ndjson.ts'
-import type { OutputStream } from '../model.ts'
-import { decodeNodeEvent, type NodeWorkerEvent } from './node-protocol.ts'
-import { retireProcessGroup, signalProcessGroup, type CleanupResult } from './process-group.ts'
-import type { NodeEvalResult, NodeEvent, NodeInterpreter } from './node-types.ts'
-import { errorMessage } from './protocol.ts'
+import { NdjsonDecoder, encodeNdjson } from '../../ndjson.ts'
+import type { OutputStream } from '../../model.ts'
+import { retireProcessGroup, signalProcessGroup, type CleanupResult } from '../process-group.ts'
+import { errorMessage } from '../protocol.ts'
+import { decodeNodeEvent, type NodeWorkerEvent } from './protocol.ts'
+import type { NodeEvalResult, NodeEvent, NodeInterpreter } from './types.ts'
 
 const RETIRE_OPTIONS = {
   orderlyWaitMs: 350,

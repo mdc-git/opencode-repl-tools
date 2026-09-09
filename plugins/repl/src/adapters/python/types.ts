@@ -1,5 +1,5 @@
-import type { OutputStream } from '../model.ts'
-import type { CleanupResult } from './process-group.ts'
+import type { OutputStream } from '../../model.ts'
+import type { CleanupResult } from '../process-group.ts'
 
 export class PythonStartupError extends Error {
   constructor(

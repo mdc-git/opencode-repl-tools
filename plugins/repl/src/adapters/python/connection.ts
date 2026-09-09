@@ -2,14 +2,14 @@ import { Buffer } from 'node:buffer'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { NdjsonDecoder, encodeNdjson } from '../ndjson.ts'
-import type { OutputStream } from '../model.ts'
-import { retireProcessGroup, type CleanupResult } from './process-group.ts'
-import { decodePythonEvent, type PythonBrokerEvent } from './python-protocol.ts'
-import type { PythonEvalResult, PythonEvent, PythonInterpreter } from './python-types.ts'
-import { errorMessage } from './protocol.ts'
+import { NdjsonDecoder, encodeNdjson } from '../../ndjson.ts'
+import type { OutputStream } from '../../model.ts'
+import { retireProcessGroup, type CleanupResult } from '../process-group.ts'
+import { errorMessage } from '../protocol.ts'
+import { decodePythonEvent, type PythonBrokerEvent } from './protocol.ts'
+import type { PythonEvalResult, PythonEvent, PythonInterpreter } from './types.ts'
 
-const brokerPath = fileURLToPath(new URL('../../workers/python-kernel.py', import.meta.url))
+const brokerPath = fileURLToPath(new URL('../../../workers/python-kernel.py', import.meta.url))
 const RETIRE_OPTIONS = {
   orderlyWaitMs: 4500,
   termWaitMs: 750,

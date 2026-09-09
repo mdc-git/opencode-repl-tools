@@ -1,12 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
-import { createNodeConnection } from './node-connection.ts'
+import { createNodeConnection } from './node/connection.ts'
+import { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node/types.ts'
 import { retireProcessGroup, type CleanupResult } from './process-group.ts'
 import { errorMessage } from './protocol.ts'
-import { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node-types.ts'
 
-export { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node-types.ts'
+export { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node/types.ts'
 
 const workerPath = fileURLToPath(new URL('../../workers/node-repl.mjs', import.meta.url))
 const RETIRE_OPTIONS = {

@@ -1,4 +1,4 @@
-import type { OutputStream } from '../model.ts'
+import type { OutputStream } from '../../model.ts'
 import {
   isBooleanValue,
   optionalStringValue,
@@ -7,7 +7,7 @@ import {
   stringValue,
   type JsonRecord,
   type ProtocolError
-} from './protocol.ts'
+} from '../protocol.ts'
 
 export type PythonBrokerEvent =
   | { readonly type: 'ready'; readonly pythonVersion: string }

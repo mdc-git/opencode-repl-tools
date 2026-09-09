@@ -1,9 +1,9 @@
 import { errorMessage } from './protocol.ts'
-import { type PythonConnection, spawnPythonConnection } from './python-connection.ts'
-import { PythonEnvironment, isSupportedPython, parsePythonVersion } from './python-environment.ts'
-import { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python-types.ts'
+import { type PythonConnection, spawnPythonConnection } from './python/connection.ts'
+import { PythonEnvironment, isSupportedPython, parsePythonVersion } from './python/environment.ts'
+import { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python/types.ts'
 
-export { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python-types.ts'
+export { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python/types.ts'
 
 async function raceAbort<T>(promise: Promise<T>, signal: AbortSignal, message: string): Promise<T> {
   if (signal.aborted) {
