@@ -18,8 +18,8 @@ import type { OutputRing } from '../output-ring.ts'
 export const TRANSCRIPT_BYTES = 1024 * 1024
 export const HISTORY_LIMIT = 20
 export const PREVIEW_BYTES = 16 * 1024
-export const FOREGROUND_MS = 5_000
-export const CANCEL_GRACE_MS = 2_000
+export const FOREGROUND_MS = 5000
+export const CANCEL_GRACE_MS = 2000
 
 export type SessionID = Parameters<Plugin.Context['session']['get']>[0]['sessionID']
 export type ToolCallContext = { readonly sessionID: SessionID }
@@ -79,7 +79,7 @@ export type ReplRuntime = {
 }
 
 export function signalPair(): SignalPair {
-  let settled = false
+  let isSettled = false
   let resolvePromise!: () => void
   const promise = new Promise<void>((resolve) => {
     resolvePromise = resolve
@@ -87,10 +87,11 @@ export function signalPair(): SignalPair {
   return {
     promise,
     resolve() {
-      if (settled) {
+      if (isSettled) {
         return
       }
-      settled = true
+
+      isSettled = true
       resolvePromise()
     }
   }
@@ -112,12 +113,13 @@ export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message
   }
+
   const value = (error as { readonly message?: unknown } | undefined)?.message
   return typeof value === 'string' ? value : String(error)
 }
 
 export function cellKey(sessionID: SessionID, language: Language): string {
-  return `${String(sessionID)}\0${language}`
+  return `${sessionID}\0${language}`
 }
 
 export function sameCell(map: Map<string, Cell>, cell: Cell): boolean {
@@ -128,10 +130,12 @@ export function findJob(cell: Cell | undefined, id: string): Job | undefined {
   if (cell === undefined) {
     return undefined
   }
-  const active = cell.active
+
+  const { active } = cell
   if (active?.id === id) {
     return active
   }
+
   return cell.history.find((job) => job.id === id)
 }
 
@@ -147,6 +151,7 @@ function restoreLifecycle(cell: Cell): void {
   if (cell.lifecycle === 'failed' || cell.lifecycle === 'retiring') {
     return
   }
+
   cell.lifecycle = cell.interpreter === undefined ? 'healthy' : 'live'
 }
 
@@ -159,6 +164,7 @@ export function finishJob(
   if (terminal(job.state)) {
     return
   }
+
   job.state = state
   job.error = error
   job.prompt = undefined
@@ -166,6 +172,7 @@ export function finishJob(
   if (cell.active === job) {
     cell.active = undefined
   }
+
   retainJob(cell, job)
   job.foreground.resolve()
   job.completion.resolve()
@@ -194,9 +201,11 @@ function asStartupError(error: unknown): NodeStartupError | PythonStartupError |
   if (error instanceof NodeStartupError) {
     return error
   }
+
   if (error instanceof PythonStartupError) {
     return error
   }
+
   return undefined
 }
 
@@ -208,8 +217,10 @@ export function startupCleanup(error: unknown): {
   if (startupError === undefined) {
     return { unconfirmed: false }
   }
+
   if (startupError.cleanupConfirmed !== false) {
     return { unconfirmed: false }
   }
+
   return { unconfirmed: true, retry: startupError.retryCleanup }
 }

@@ -12,24 +12,27 @@ function abortStartup(cell: Cell): void {
 
 function suppressCell(cell: Cell): void {
   cell.notificationsSuppressed = true
-  const active = cell.active
+  const { active } = cell
   if (active === undefined || terminal(active.state)) {
     return
   }
+
   active.cancelRequested = true
   active.notificationSuppressed = true
   abortStartup(cell)
 }
 
 function cleanupInvalidated(cell: Cell): Effect.Effect<CleanupResult | undefined> {
-  const interpreter = cell.interpreter
+  const { interpreter } = cell
   if (interpreter !== undefined) {
-    return Effect.promise(() => safeShutdown(interpreter))
+    return Effect.promise(async () => safeShutdown(interpreter))
   }
-  const cleanupRetry = cell.cleanupRetry
+
+  const { cleanupRetry } = cell
   if (cleanupRetry !== undefined) {
-    return Effect.promise(() => safeRetry(cleanupRetry))
+    return Effect.promise(async () => safeRetry(cleanupRetry))
   }
+
   return Effect.succeed(undefined)
 }
 
@@ -37,6 +40,7 @@ function warnCleanup(state: RuntimeState, cell: Cell, result: CleanupResult | un
   if (result === undefined || result.confirmed) {
     return Effect.void
   }
+
   return Effect.logWarning('REPL lifecycle cleanup could not be confirmed', {
     sessionID: cell.sessionID,
     language: cell.language,

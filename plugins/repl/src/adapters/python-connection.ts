@@ -11,7 +11,7 @@ import { errorMessage } from './protocol.ts'
 
 const brokerPath = fileURLToPath(new URL('../../workers/python-kernel.py', import.meta.url))
 const RETIRE_OPTIONS = {
-  orderlyWaitMs: 4_500,
+  orderlyWaitMs: 4500,
   termWaitMs: 750,
   killWaitMs: 750,
   label: 'Python broker/kernel'
@@ -58,10 +58,18 @@ export class PythonConnection implements PythonInterpreter {
   })
 
   constructor(private readonly options: PythonConnectionOptions) {
-    options.child.stdout.on('data', (chunk) => this.onStdout(chunk))
-    options.child.stderr.on('data', (chunk) => this.emitOutput('system', chunk))
-    options.child.once('error', (error) => this.fatal(error.message))
-    options.child.once('exit', (code, signal) => this.onExit(code, signal))
+    options.child.stdout.on('data', (chunk) => {
+      this.onStdout(chunk)
+    })
+    options.child.stderr.on('data', (chunk) => {
+      this.emitOutput('system', chunk)
+    })
+    options.child.once('error', (error) => {
+      this.fatal(error.message)
+    })
+    options.child.once('exit', (code, signal) => {
+      this.onExit(code, signal)
+    })
   }
 
   private onStdout(chunk: unknown): void {
@@ -79,14 +87,17 @@ export class PythonConnection implements PythonInterpreter {
       this.options.onEvent(event)
       return
     }
+
     if (event.type === 'done') {
       this.finishPending(event)
       return
     }
+
     if (event.type === 'waiting_input') {
       this.options.onEvent(event)
       return
     }
+
     this.onLifecycleEvent(event)
   }
 
@@ -97,10 +108,12 @@ export class PythonConnection implements PythonInterpreter {
       this.readyResolve(event.pythonVersion)
       return
     }
+
     if (event.type === 'fatal') {
       this.fatal(event.message)
       return
     }
+
     this.shutdownAcknowledged = true
     this.shutdownConfirmed = event.confirmed
   }
@@ -114,10 +127,11 @@ export class PythonConnection implements PythonInterpreter {
       this.fatal(`Python broker completed unexpected job ${event.jobId}`)
       return
     }
+
     const current = this.pending
     this.pending = undefined
     this.activeJobId = undefined
-    current.resolve({ ok: event.ok, ...(event.error === undefined ? {} : { error: event.error }) })
+    current.resolve({ ok: event.ok, ...(event.error !== undefined && { error: event.error }) })
   }
 
   private failPending(error: Error): void {
@@ -131,13 +145,14 @@ export class PythonConnection implements PythonInterpreter {
     if (!this.fatalSeen) {
       this.options.onEvent({ type: 'fatal', message })
     }
+
     this.fatalSeen = true
     const error = new Error(message)
     this.failPending(error)
     this.readyReject(error)
   }
 
-  private onExit(code: number | null, signal: NodeJS.Signals | null): void {
+  private onExit(code: number | undefined, signal: NodeJS.Signals | undefined): void {
     this.closed = true
     const message = `Python broker exited (code=${String(code)}, signal=${String(signal)})`
     if (!this.shutdownRequested && !this.fatalSeen) {
@@ -148,7 +163,9 @@ export class PythonConnection implements PythonInterpreter {
   }
 
   async waitUntilReady(signal: AbortSignal): Promise<string> {
-    const abortStartup = () => this.cancelStartup()
+    const abortStartup = () => {
+      this.cancelStartup()
+    }
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
       return await this.ready
@@ -165,11 +182,13 @@ export class PythonConnection implements PythonInterpreter {
 
   async evaluate(jobId: string, code: string): Promise<PythonEvalResult> {
     if (this.closed) {
-      return Promise.reject(new Error('Python broker is closed'))
+      throw new Error('Python broker is closed')
     }
+
     if (this.pending !== undefined) {
-      return Promise.reject(new Error('Python broker already has an active evaluation'))
+      throw new Error('Python broker already has an active evaluation')
     }
+
     return new Promise((resolve, reject) => {
       this.pending = { jobId, resolve, reject }
       this.activeJobId = jobId
@@ -177,13 +196,14 @@ export class PythonConnection implements PythonInterpreter {
         if (this.isPending(jobId)) {
           this.clearPending()
         }
+
         reject(error)
       })
     })
   }
 
   private isPending(jobId: string): boolean {
-    const pending = this.pending
+    const { pending } = this
     return pending?.jobId === jobId
   }
 
@@ -212,10 +232,11 @@ export class PythonConnection implements PythonInterpreter {
     if (this.shutdownPromise !== undefined) {
       return this.shutdownPromise
     }
+
     this.shutdownRequested = true
-    const current = retirement(this.options.child, () => this.requestShutdown()).then((result) =>
-      this.accountForKernelAck(result)
-    )
+    const current = retirement(this.options.child, () => {
+      this.requestShutdown()
+    }).then((result) => this.accountForKernelAck(result))
     this.shutdownPromise = current.then((result) => this.finishShutdown(result))
     return this.shutdownPromise
   }
@@ -230,6 +251,7 @@ export class PythonConnection implements PythonInterpreter {
     if (result.message !== undefined) {
       return result.message
     }
+
     return 'broker acknowledged kernel shutdown but process-group exit was not confirmed'
   }
 
@@ -237,12 +259,15 @@ export class PythonConnection implements PythonInterpreter {
     if (result.confirmed) {
       return result
     }
+
     if (!this.shutdownAcknowledged) {
       return result
     }
+
     if (!this.shutdownConfirmed) {
       return result
     }
+
     return { confirmed: false, message: this.kernelAckFailureMessage(result) }
   }
 
@@ -252,11 +277,12 @@ export class PythonConnection implements PythonInterpreter {
     } else {
       this.shutdownPromise = undefined
     }
+
     return result
   }
 
   alive(): boolean {
-    const child = this.options.child
+    const { child } = this.options
     return !this.closed && child.exitCode === null && child.signalCode === null
   }
 
@@ -264,6 +290,7 @@ export class PythonConnection implements PythonInterpreter {
     if (this.closed) {
       throw new Error('Python broker is closed')
     }
+
     await new Promise<void>((resolve, reject) => {
       this.options.child.stdin.write(encodeNdjson(message), (error) => {
         if (error) {
@@ -291,8 +318,9 @@ export function spawnPythonConnection(options: {
     void retireProcessGroup(child, RETIRE_OPTIONS)
     throw new Error('Python broker standard pipes are unavailable')
   }
+
   return new PythonConnection({
-    child: child as ChildProcessWithoutNullStreams,
+    child,
     onEvent: options.onEvent
   })
 }

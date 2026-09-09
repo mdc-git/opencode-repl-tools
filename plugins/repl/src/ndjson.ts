@@ -15,8 +15,10 @@ export class NdjsonDecoder<T> {
       if (line.length > 0) {
         values.push(this.decode(JSON.parse(line)))
       }
+
       newline = this.buffer.indexOf('\n')
     }
+
     return values
   }
 }

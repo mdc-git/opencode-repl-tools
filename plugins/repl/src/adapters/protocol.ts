@@ -13,22 +13,25 @@ export function recordValue(value: unknown, label: string): JsonRecord {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error(`${label} must be an object`)
   }
+
   return value as JsonRecord
 }
 
 export function stringValue(record: JsonRecord, key: string, label: string): string {
   const value = record[key]
   if (typeof value !== 'string') {
-    throw new Error(`${label}.${key} must be a string`)
+    throw new TypeError(`${label}.${key} must be a string`)
   }
+
   return value
 }
 
 export function booleanValue(record: JsonRecord, key: string, label: string): boolean {
   const value = record[key]
   if (typeof value !== 'boolean') {
-    throw new Error(`${label}.${key} must be a boolean`)
+    throw new TypeError(`${label}.${key} must be a boolean`)
   }
+
   return value
 }
 
@@ -41,9 +44,11 @@ export function optionalStringValue(
   if (value === undefined) {
     return undefined
   }
+
   if (typeof value !== 'string') {
-    throw new Error(`${label}.${key} must be a string`)
+    throw new TypeError(`${label}.${key} must be a string`)
   }
+
   return value
 }
 
@@ -51,6 +56,7 @@ export function protocolError(value: unknown, label: string): ProtocolError | un
   if (value === undefined) {
     return undefined
   }
+
   const item = recordValue(value, label)
   return {
     kind: stringValue(item, 'kind', label),

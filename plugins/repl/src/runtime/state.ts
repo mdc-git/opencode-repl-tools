@@ -24,6 +24,7 @@ function workspaceMismatch(expected: string | undefined, actual: string | undefi
   if (expected === undefined || actual === undefined) {
     return false
   }
+
   return expected !== actual
 }
 
@@ -60,6 +61,7 @@ export class RuntimeState {
     if (!this.activationOpen()) {
       return
     }
+
     Effect.runFork(effect.pipe(Effect.forkIn(this.activationScope), Effect.asVoid))
   }
 
@@ -67,6 +69,7 @@ export class RuntimeState {
     if (!this.activationOpen()) {
       return Effect.succeed(this.closedValidation())
     }
+
     return this.ctx.session.get({ sessionID }).pipe(
       Effect.map((session) => this.validateLocation(session)),
       Effect.catch((error) => Effect.succeed(this.lookupFailure(error)))
@@ -96,9 +99,11 @@ export class RuntimeState {
     if (session.location.directory !== this.ctx.location.directory) {
       return this.locationFailure('session moved away from this plugin location')
     }
+
     if (workspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID)) {
       return this.locationFailure('session workspace no longer matches this plugin location')
     }
+
     return { ok: true as const, session }
   }
 
@@ -127,12 +132,13 @@ export class RuntimeState {
       const replacement = state.activationOpen()
         ? yield* Scope.fork(state.activationScope)
         : undefined
-      const used = yield* state.locked((map) =>
+      const isUsed = yield* state.locked((map) =>
         Effect.sync(() => state.installReplacement(map, cell, replacement))
       )
-      if (replacement !== undefined && !used) {
+      if (replacement !== undefined && !isUsed) {
         yield* Scope.close(replacement, Exit.void)
       }
+
       yield* Scope.close(oldScope, Exit.void)
     })
   }
@@ -145,12 +151,15 @@ export class RuntimeState {
     if (!sameCell(map, cell)) {
       return false
     }
+
     if (cell.lifecycle === 'failed') {
       return false
     }
+
     if (replacement !== undefined) {
       cell.scope = replacement
     }
+
     cell.lifecycle = lifecycleForInterpreter(cell)
     return replacement !== undefined
   }

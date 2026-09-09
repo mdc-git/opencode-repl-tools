@@ -55,9 +55,11 @@ function invalidationEffect(
   if (!invalidatingEvents.has(event.type)) {
     return Effect.void
   }
+
   if (event.sessionID === undefined) {
     return Effect.void
   }
+
   return runtime.invalidateSession(event.sessionID)
 }
 
@@ -68,10 +70,13 @@ const replPlugin = Plugin.define({
       if (process.platform !== 'linux') {
         return yield* Effect.die(new Error('opencode-repl-tools supports Linux only'))
       }
+
       const nodeCommand = process.env.OPENCODE_REPL_NODE ?? 'node'
       const pythonCommand = process.env.OPENCODE_REPL_PYTHON ?? 'python3'
       const runtime = yield* makeRuntime(ctx, nodeCommand, pythonCommand)
-      yield* ctx.tool.transform((editor) => addTools(editor, runtime))
+      yield* ctx.tool.transform((editor) => {
+        addTools(editor, runtime)
+      })
       yield* ctx.event.subscribe().pipe(
         Stream.runForEach((event) => invalidationEffect(runtime, event)),
         Effect.forkScoped

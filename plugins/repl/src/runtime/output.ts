@@ -7,10 +7,12 @@ export function utf8Tail(text: string, maxBytes: number): string {
   if (buffer.length <= maxBytes) {
     return text
   }
+
   let start = buffer.length - maxBytes
   while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
     start += 1
   }
+
   return buffer.subarray(start).toString('utf8')
 }
 
@@ -37,6 +39,7 @@ function previewChunks(chunks: readonly OutputChunk[], maxBytes: number) {
       remaining = appendPreviewChunk(reversed, chunk, remaining)
     }
   }
+
   return {
     chunks: reversed.reverse(),
     truncated: reversed.length < chunks.length
@@ -47,9 +50,11 @@ function jobError(cell: Cell, job: Job) {
   if (cell.lifecycle !== 'failed') {
     return job.error
   }
+
   if (cell.cleanupError === undefined) {
     return job.error
   }
+
   return { kind: 'lifecycle' as const, message: cell.cleanupError }
 }
 
@@ -57,9 +62,10 @@ function inputDetails(job: Job): Pick<JobStatus, 'prompt' | 'password'> {
   if (job.state !== 'waiting_input') {
     return {}
   }
+
   return {
-    ...(job.prompt === undefined ? {} : { prompt: job.prompt }),
-    ...(job.password === undefined ? {} : { password: job.password })
+    ...(job.prompt !== undefined && { prompt: job.prompt }),
+    ...(job.password !== undefined && { password: job.password })
   }
 }
 
@@ -71,6 +77,7 @@ function selectedChunks(chunks: readonly OutputChunk[], preview: boolean | undef
   if (preview === true) {
     return previewChunks(chunks, PREVIEW_BYTES)
   }
+
   return { chunks: [...chunks], truncated: false }
 }
 

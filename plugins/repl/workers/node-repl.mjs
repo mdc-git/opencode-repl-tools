@@ -8,13 +8,15 @@ import ts from 'typescript'
 
 function requiredCwd() {
   const index = process.argv.indexOf('--cwd')
-  if (index < 0) {
+  if (index === -1) {
     throw new Error('node-repl worker requires --cwd')
   }
+
   const value = process.argv[index + 1]
   if (typeof value !== 'string') {
-    throw new Error('node-repl worker requires --cwd')
+    throw new TypeError('node-repl worker requires --cwd')
   }
+
   return value
 }
 
@@ -26,6 +28,7 @@ function fullReason(error) {
   if (error instanceof Error) {
     return error.stack ?? `${error.name}: ${error.message}`
   }
+
   return String(error)
 }
 
@@ -33,6 +36,7 @@ function conciseError(error) {
   if (!(error instanceof Error)) {
     return { kind: 'Error', message: String(error) }
   }
+
   return { kind: error.name || 'Error', message: error.message }
 }
 
@@ -47,8 +51,8 @@ const replOutput = new Writable({
 })
 let controlBuffer = ''
 let activeJobId
-let shuttingDown = false
-let fatalSeen = false
+let isShuttingDown = false
+let isFatalSeen = false
 
 const transpileOptions = {
   target: ts.ScriptTarget.ES2024,
@@ -63,6 +67,7 @@ function diagnosticText(diagnostic) {
   if (diagnostic.file === undefined || diagnostic.start === undefined) {
     return `TypeScript: ${message}`
   }
+
   const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
   return `TypeScript ${position.line + 1}:${position.character + 1}: ${message}`
 }
@@ -79,6 +84,7 @@ function transpile(code) {
   if (errors.length > 0) {
     throw new SyntaxError(errors.map(diagnosticText).join('\n'))
   }
+
   return result.outputText
 }
 
@@ -87,7 +93,7 @@ function emit(message) {
 }
 
 function closeWorker(exitCode) {
-  shuttingDown = true
+  isShuttingDown = true
   process.exitCode = exitCode
   server.close()
   replInput.destroy()
@@ -96,14 +102,16 @@ function closeWorker(exitCode) {
 }
 
 function fatal(reason) {
-  if (fatalSeen) {
+  if (isFatalSeen) {
     return
   }
-  fatalSeen = true
+
+  isFatalSeen = true
   const text = fullReason(reason)
   if (text.length > 0) {
     process.stderr.write(lineText(text))
   }
+
   emit({ type: 'fatal', message: text })
   closeWorker(1)
 }
@@ -120,6 +128,7 @@ function handleReplError(error) {
     fatal(error)
     return 'ignore'
   }
+
   activeJobId = undefined
   emitEvaluationFailure(jobId, error)
   return 'ignore'
@@ -143,11 +152,13 @@ function renderResult(jobId, result) {
   if (result === undefined) {
     return true
   }
+
   try {
     const rendered = server.writer(result)
     if (rendered === 'undefined') {
       return true
     }
+
     emit({ type: 'output', jobId, stream: 'display', text: lineText(rendered) })
     return true
   } catch (error) {
@@ -164,11 +175,13 @@ function finishEvaluation(jobId, error, result) {
   if (activeJobId !== jobId) {
     return
   }
+
   activeJobId = undefined
   if (hasError(error)) {
     emitEvaluationFailure(jobId, error)
     return
   }
+
   if (renderResult(jobId, result)) {
     emit({ type: 'done', jobId, ok: true })
   }
@@ -179,6 +192,7 @@ function evaluate(jobId, code) {
     fatal(new Error('received eval while another evaluation is active'))
     return
   }
+
   let javascript
   try {
     javascript = transpile(code)
@@ -186,6 +200,7 @@ function evaluate(jobId, code) {
     emitEvaluationFailure(jobId, error)
     return
   }
+
   activeJobId = jobId
   server.eval(javascript, server.context, 'repl.ts', (error, result) =>
     finishEvaluation(jobId, error, result)
@@ -197,13 +212,15 @@ function evaluateCommand(message) {
     fatal(new Error('invalid eval command'))
     return
   }
+
   evaluate(message.jobId, message.code)
 }
 
 function shutdown() {
-  if (shuttingDown) {
+  if (isShuttingDown) {
     return
   }
+
   fs.writeSync(4, `${JSON.stringify({ type: 'shutdown' })}\n`)
   closeWorker(0)
 }
@@ -212,19 +229,25 @@ function commandType(message) {
   if (typeof message !== 'object' || message === null) {
     return undefined
   }
+
   return message.type
 }
 
 function handleControl(message) {
   switch (commandType(message)) {
-    case 'eval':
+    case 'eval': {
       evaluateCommand(message)
       return
-    case 'shutdown':
+    }
+
+    case 'shutdown': {
       shutdown()
       return
-    default:
+    }
+
+    default: {
       fatal(new Error('unknown control command'))
+    }
   }
 }
 
@@ -232,6 +255,7 @@ function consumeControlLine(line) {
   if (line.length === 0) {
     return
   }
+
   try {
     handleControl(JSON.parse(line))
   } catch (error) {
@@ -254,7 +278,7 @@ control.setEncoding('utf8')
 control.on('data', consumeControlChunk)
 control.on('error', fatal)
 server.on('exit', () => {
-  if (!shuttingDown) {
+  if (!isShuttingDown) {
     fatal(new Error('Node REPL exited unexpectedly'))
   }
 })

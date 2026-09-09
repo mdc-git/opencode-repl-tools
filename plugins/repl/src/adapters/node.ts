@@ -28,6 +28,7 @@ async function createConnection(child: ChildProcess, onEvent: (event: NodeEvent)
     if (cleanup.confirmed) {
       throw error
     }
+
     const message = errorMessage(error)
     throw new NodeStartupError(message, false, async () => retirement(child))
   }
@@ -54,6 +55,7 @@ export async function startNodeInterpreter(options: {
     if (cleanup.confirmed) {
       throw error
     }
+
     const message = errorMessage(error)
     throw new NodeStartupError(message, false, async () => connection.shutdown())
   }

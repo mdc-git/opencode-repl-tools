@@ -21,13 +21,16 @@ function prepareFatal(
   if (!sameCell(map, cell)) {
     return undefined
   }
+
   if (fatalBlocked(cell)) {
     return undefined
   }
-  const interpreter = cell.interpreter
+
+  const { interpreter } = cell
   if (interpreter === undefined) {
     return undefined
   }
+
   cell.lifecycle = 'retiring'
   cell.transcript.append('system', `[interpreter fatal] ${message}\n`)
   return { interpreter, scope: cell.scope }
@@ -38,10 +41,11 @@ function failFatalCleanup(cell: Cell, interpreter: Interpreter, message: string)
   cell.cleanupError = message
   cell.cleanupRetry = async () => interpreter.shutdown()
   cell.transcript.append('system', `[cleanup unconfirmed] ${message}\n`)
-  const active = cell.active
+  const { active } = cell
   if (active === undefined || terminal(active.state)) {
     return undefined
   }
+
   finishJob(cell, active, 'failed', { kind: 'lifecycle', message })
   return active
 }
@@ -50,11 +54,13 @@ function finishFatalJob(active: Job | undefined, cell: Cell, message: string): J
   if (active === undefined || terminal(active.state)) {
     return undefined
   }
+
   if (active.cancelRequested) {
     finishJob(cell, active, 'cancelled')
   } else {
     finishJob(cell, active, 'failed', { kind: 'runtime', message })
   }
+
   return active
 }
 
@@ -62,6 +68,7 @@ function finishFatal(cell: Cell, interpreter: Interpreter, message: string): Job
   if (cell.interpreter === interpreter) {
     cell.interpreter = undefined
   }
+
   const finished = finishFatalJob(cell.active, cell, message)
   cell.cleanupError = undefined
   cell.cleanupRetry = undefined
@@ -81,17 +88,18 @@ function finalizeFatal(
   return Effect.gen(function* () {
     const cleanup = yield* Effect.promise(async () => safeShutdown(prepared.interpreter))
     let finished: Job | undefined
-    if (!cleanup.confirmed) {
-      const detail = fatalCleanupMessage(cleanup.message)
-      finished = yield* state.locked(() =>
-        Effect.sync(() => failFatalCleanup(cell, prepared.interpreter, detail))
-      )
-    } else {
+    if (cleanup.confirmed) {
       finished = yield* state.locked(() =>
         Effect.sync(() => finishFatal(cell, prepared.interpreter, message))
       )
       yield* state.replaceCellScope(cell, prepared.scope)
+    } else {
+      const detail = fatalCleanupMessage(cleanup.message)
+      finished = yield* state.locked(() =>
+        Effect.sync(() => failFatalCleanup(cell, prepared.interpreter, detail))
+      )
     }
+
     if (finished !== undefined) {
       yield* notifyTerminal(state, cell, finished)
     }

@@ -34,6 +34,7 @@ function parseVersion(version: string): PythonVersion | undefined {
   if (match === null) {
     return undefined
   }
+
   return { major: Number(match[1]), minor: Number(match[2]) }
 }
 
@@ -41,6 +42,7 @@ function supported(version: PythonVersion | undefined): version is PythonVersion
   if (version === undefined) {
     return false
   }
+
   return version.major > 3 || (version.major === 3 && version.minor >= 10)
 }
 
@@ -48,6 +50,7 @@ function errorCode(error: unknown): unknown {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined
   }
+
   return error.code
 }
 
@@ -111,9 +114,11 @@ async function publish(temporaryVenv: string, finalVenv: string): Promise<void> 
     if (publishRace(code)) {
       return
     }
+
     if (code !== 'EXDEV') {
       throw error
     }
+
     await copyPublished(temporaryVenv, finalVenv)
   }
 }
@@ -128,11 +133,13 @@ export class PythonEnvironment {
 
   async ensure(): Promise<string> {
     if (this.readyPython !== undefined) {
-      return Promise.resolve(this.readyPython)
+      return this.readyPython
     }
+
     if (this.bootstrapPromise !== undefined) {
       return this.bootstrapPromise
     }
+
     this.bootstrapPromise = this.build(this.bootstrapAbort.signal).then(
       (python) => this.remember(python),
       (error) => this.clearFailure(error)
@@ -162,6 +169,7 @@ export class PythonEnvironment {
         result.tail
       )
     }
+
     return { version, tail: result.tail }
   }
 
@@ -174,6 +182,7 @@ export class PythonEnvironment {
     if (await exists(paths.python)) {
       return this.useCached(paths, signal)
     }
+
     return this.create(paths, signal)
   }
 
@@ -203,6 +212,7 @@ export class PythonEnvironment {
       if (error instanceof PythonStartupError) {
         throw error
       }
+
       throw new PythonStartupError(errorMessage(error))
     } finally {
       await this.removeTemporary(temporaryRoot)

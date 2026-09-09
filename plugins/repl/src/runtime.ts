@@ -19,7 +19,7 @@ export const makeRuntime = (
       Effect.gen(function* () {
         const targets = yield* state.locked((map) => Effect.sync(() => takeAllCells(map)))
         yield* invalidateCells(state, targets)
-        yield* Effect.promise(() => state.python.close())
+        yield* Effect.promise(async () => state.python.close())
       })
     )
     return runtime

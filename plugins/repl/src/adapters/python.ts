@@ -1,5 +1,5 @@
 import { errorMessage } from './protocol.ts'
-import { PythonConnection, spawnPythonConnection } from './python-connection.ts'
+import { type PythonConnection, spawnPythonConnection } from './python-connection.ts'
 import { PythonEnvironment, isSupportedPython, parsePythonVersion } from './python-environment.ts'
 import { PythonStartupError, type PythonEvent, type PythonInterpreter } from './python-types.ts'
 
@@ -9,12 +9,19 @@ async function raceAbort<T>(promise: Promise<T>, signal: AbortSignal, message: s
   if (signal.aborted) {
     throw new Error(message)
   }
+
   return new Promise((resolve, reject) => {
-    const onAbort = () => reject(new Error(message))
+    const onAbort = () => {
+      reject(new Error(message))
+    }
     signal.addEventListener('abort', onAbort, { once: true })
     void promise.then(
-      (value) => finish(resolve, signal, onAbort, value),
-      (error: unknown) => finish(reject, signal, onAbort, error)
+      (value) => {
+        finish(resolve, signal, onAbort, value)
+      },
+      (error: unknown) => {
+        finish(reject, signal, onAbort, error)
+      }
     )
   })
 }
@@ -33,6 +40,7 @@ function assertSupportedVersion(versionText: string): void {
   if (isSupportedPython(parsePythonVersion(versionText))) {
     return
   }
+
   throw new PythonStartupError(
     `Python REPL requires Python >= 3.10; broker reported ${versionText}`
   )
@@ -43,6 +51,7 @@ async function failReady(connection: PythonConnection, error: unknown): Promise<
   if (cleanup.confirmed) {
     throw error
   }
+
   const message = errorMessage(error)
   const tail = error instanceof PythonStartupError ? error.diagnosticTail : undefined
   throw new PythonStartupError(message, tail, false, async () => connection.shutdown())
@@ -81,12 +90,14 @@ export class PythonAdapter {
     if (options.signal.aborted) {
       throw new Error('Python REPL startup was cancelled')
     }
+
     let connection: PythonConnection
     try {
       connection = spawnPythonConnection({ python, cwd: options.cwd, onEvent: options.onEvent })
     } catch (error) {
       throw new PythonStartupError(errorMessage(error))
     }
+
     return readyConnection(connection, options.signal)
   }
 

@@ -33,6 +33,7 @@ function decodeOutput(event: JsonRecord): NodeWorkerEvent {
   if (stream !== 'display' && stream !== 'stderr') {
     throw new Error(`invalid Node output stream: ${stream}`)
   }
+
   return {
     type: 'output',
     jobId: stringValue(event, 'jobId', 'Node output event'),
@@ -47,7 +48,7 @@ function decodeDone(event: JsonRecord): NodeWorkerEvent {
     type: 'done',
     jobId: stringValue(event, 'jobId', 'Node done event'),
     ok: booleanValue(event, 'ok', 'Node done event'),
-    ...(error === undefined ? {} : { error })
+    ...(error !== undefined && { error })
   }
 }
 
@@ -70,5 +71,6 @@ export function decodeNodeEvent(value: unknown): NodeWorkerEvent {
   if (decode === undefined) {
     throw new Error(`unknown Node worker event: ${JSON.stringify(value)}`)
   }
+
   return decode(event)
 }

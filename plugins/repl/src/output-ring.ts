@@ -17,10 +17,12 @@ function utf8Tail(text: string, maxBytes: number): string {
   if (buffer.length <= maxBytes) {
     return text
   }
+
   let start = buffer.length - maxBytes
   while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
     start += 1
   }
+
   return buffer.subarray(start).toString('utf8')
 }
 
@@ -33,7 +35,8 @@ function normalizeCursor(cursor: number): number {
   if (!Number.isSafeInteger(cursor)) {
     return 0
   }
-  return cursor < 0 ? 0 : cursor
+
+  return Math.max(cursor, 0)
 }
 
 function readWasTruncated(
@@ -44,9 +47,11 @@ function readWasTruncated(
   if (selectedFirst?.partial === true) {
     return true
   }
+
   if (first === undefined) {
     return false
   }
+
   return cursor < first.cursor - 1
 }
 
@@ -69,10 +74,11 @@ export class OutputRing {
     if (text.length === 0) {
       return this.cursor
     }
+
     const bytes = Buffer.byteLength(text, 'utf8')
-    const partial = bytes > this.maxBytes
-    const retained = partial ? utf8Tail(text, this.maxBytes) : text
-    const chunk = this.store(stream, retained, partial, jobId)
+    const isPartial = bytes > this.maxBytes
+    const retained = isPartial ? utf8Tail(text, this.maxBytes) : text
+    const chunk = this.store(stream, retained, isPartial, jobId)
     this.evict()
     return chunk.cursor
   }
@@ -82,7 +88,7 @@ export class OutputRing {
       cursor: this.nextCursor++,
       stream,
       text,
-      ...(jobId === undefined ? {} : { jobId }),
+      ...(jobId !== undefined && { jobId }),
       bytes: Buffer.byteLength(text, 'utf8'),
       partial
     }

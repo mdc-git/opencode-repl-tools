@@ -35,6 +35,7 @@ function readable(value: unknown, label: string): Readable {
   if (value && typeof (value as Readable).on === 'function') {
     return value as Readable
   }
+
   throw new Error(`Node REPL ${label} pipe is unavailable`)
 }
 
@@ -42,6 +43,7 @@ function writable(value: unknown, label: string): Writable {
   if (value && typeof (value as Writable).write === 'function') {
     return value as Writable
   }
+
   throw new Error(`Node REPL ${label} pipe is unavailable`)
 }
 
@@ -80,14 +82,24 @@ class NodeConnection implements NodeInterpreter {
   }
 
   private bindStreams(): void {
-    this.options.stdout.on('data', (chunk) => this.emitOutput('stdout', chunk))
-    this.options.stderr.on('data', (chunk) => this.emitOutput('stderr', chunk))
-    this.options.events.on('data', (chunk) => this.onEventChunk(chunk))
+    this.options.stdout.on('data', (chunk) => {
+      this.emitOutput('stdout', chunk)
+    })
+    this.options.stderr.on('data', (chunk) => {
+      this.emitOutput('stderr', chunk)
+    })
+    this.options.events.on('data', (chunk) => {
+      this.onEventChunk(chunk)
+    })
   }
 
   private bindProcess(): void {
-    this.options.child.once('error', (error) => this.fatal(error.message))
-    this.options.child.once('exit', (code, signal) => this.onExit(code, signal))
+    this.options.child.once('error', (error) => {
+      this.fatal(error.message)
+    })
+    this.options.child.once('exit', (code, signal) => {
+      this.onExit(code, signal)
+    })
   }
 
   private emitOutput(stream: OutputStream, chunk: unknown): void {
@@ -109,10 +121,12 @@ class NodeConnection implements NodeInterpreter {
       this.options.onEvent(event)
       return
     }
+
     if (event.type === 'done') {
       this.finishPending(event)
       return
     }
+
     this.onLifecycleEvent(event)
   }
 
@@ -121,6 +135,7 @@ class NodeConnection implements NodeInterpreter {
       this.readyResolve(event.nodeVersion)
       return
     }
+
     if (event.type === 'fatal') {
       this.fatal(event.message)
     }
@@ -131,10 +146,11 @@ class NodeConnection implements NodeInterpreter {
       this.fatal(`Node worker completed unexpected job ${event.jobId}`)
       return
     }
+
     const current = this.pending
     this.pending = undefined
     this.activeJobId = undefined
-    current.resolve({ ok: event.ok, ...(event.error === undefined ? {} : { error: event.error }) })
+    current.resolve({ ok: event.ok, ...(event.error !== undefined && { error: event.error }) })
   }
 
   private failPending(error: Error): void {
@@ -148,13 +164,14 @@ class NodeConnection implements NodeInterpreter {
     if (!this.fatalSeen) {
       this.options.onEvent({ type: 'fatal', message })
     }
+
     this.fatalSeen = true
     const error = new Error(message)
     this.failPending(error)
     this.readyReject(error)
   }
 
-  private onExit(code: number | null, signal: NodeJS.Signals | null): void {
+  private onExit(code: number | undefined, signal: NodeJS.Signals | undefined): void {
     this.closed = true
     const message = `Node REPL worker exited (code=${String(code)}, signal=${String(signal)})`
     if (!this.shutdownRequested && !this.fatalSeen) {
@@ -165,7 +182,9 @@ class NodeConnection implements NodeInterpreter {
   }
 
   async waitUntilReady(signal: AbortSignal): Promise<void> {
-    const abortStartup = () => this.cancelStartup()
+    const abortStartup = () => {
+      this.cancelStartup()
+    }
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
       const version = await this.ready
@@ -182,6 +201,7 @@ class NodeConnection implements NodeInterpreter {
     if (this.closed) {
       return
     }
+
     this.shutdownRequested = true
     this.readyReject(new Error('Node REPL startup was cancelled'))
     void retirement(this.options.child)
@@ -189,11 +209,13 @@ class NodeConnection implements NodeInterpreter {
 
   async evaluate(jobId: string, code: string): Promise<NodeEvalResult> {
     if (this.closed) {
-      return Promise.reject(new Error('Node REPL worker is closed'))
+      throw new Error('Node REPL worker is closed')
     }
+
     if (this.pending !== undefined) {
-      return Promise.reject(new Error('Node REPL already has an active evaluation'))
+      throw new Error('Node REPL already has an active evaluation')
     }
+
     return new Promise((resolve, reject) => {
       this.pending = { jobId, resolve, reject }
       this.activeJobId = jobId
@@ -201,13 +223,14 @@ class NodeConnection implements NodeInterpreter {
         if (this.isPending(jobId)) {
           this.clearPending()
         }
+
         reject(error)
       })
     })
   }
 
   private isPending(jobId: string): boolean {
-    const pending = this.pending
+    const { pending } = this
     return pending?.jobId === jobId
   }
 
@@ -219,16 +242,19 @@ class NodeConnection implements NodeInterpreter {
   async stdin(jobId: string, data: string): Promise<void> {
     this.assertActive(jobId)
     await new Promise<void>((resolve, reject) => {
-      this.options.stdin.write(data, (error) => (error ? reject(error) : resolve()))
+      this.options.stdin.write(data, (error) => {
+        error ? reject(error) : resolve()
+      })
     })
   }
 
   async interrupt(jobId: string): Promise<void> {
     this.assertActive(jobId)
-    const pid = this.options.child.pid
+    const { pid } = this.options.child
     if (pid === undefined) {
       throw new Error('Node REPL worker PID is unavailable')
     }
+
     signalProcessGroup(pid, 'SIGINT')
   }
 
@@ -242,8 +268,11 @@ class NodeConnection implements NodeInterpreter {
     if (this.shutdownPromise !== undefined) {
       return this.shutdownPromise
     }
+
     this.shutdownRequested = true
-    const current = retirement(this.options.child, () => this.requestShutdown())
+    const current = retirement(this.options.child, () => {
+      this.requestShutdown()
+    })
     this.shutdownPromise = current.then((result) => this.finishShutdown(result))
     return this.shutdownPromise
   }
@@ -260,11 +289,12 @@ class NodeConnection implements NodeInterpreter {
     } else {
       this.shutdownPromise = undefined
     }
+
     return result
   }
 
   alive(): boolean {
-    const child = this.options.child
+    const { child } = this.options
     return !this.closed && child.exitCode === null && child.signalCode === null
   }
 
@@ -272,6 +302,7 @@ class NodeConnection implements NodeInterpreter {
     if (this.closed) {
       throw new Error('Node REPL worker is closed')
     }
+
     await new Promise<void>((resolve, reject) => {
       this.options.control.write(encodeNdjson(message), (error) => {
         if (error) {

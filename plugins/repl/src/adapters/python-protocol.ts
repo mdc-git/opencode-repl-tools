@@ -39,6 +39,7 @@ function outputStream(event: JsonRecord): OutputStream {
   if (!outputStreams.has(stream)) {
     throw new Error(`invalid Python output stream: ${stream}`)
   }
+
   return stream
 }
 
@@ -48,7 +49,7 @@ function decodeOutput(event: JsonRecord): PythonBrokerEvent {
     type: 'output',
     stream: outputStream(event),
     text: stringValue(event, 'text', 'Python output event'),
-    ...(jobId === undefined ? {} : { jobId })
+    ...(jobId !== undefined && { jobId })
   }
 }
 
@@ -67,7 +68,7 @@ function decodeDone(event: JsonRecord): PythonBrokerEvent {
     type: 'done',
     jobId: stringValue(event, 'jobId', 'Python done event'),
     ok: booleanValue(event, 'ok', 'Python done event'),
-    ...(error === undefined ? {} : { error })
+    ...(error !== undefined && { error })
   }
 }
 
@@ -96,5 +97,6 @@ export function decodePythonEvent(value: unknown): PythonBrokerEvent {
   if (decode === undefined) {
     throw new Error(`unknown Python broker event: ${JSON.stringify(value)}`)
   }
+
   return decode(event)
 }

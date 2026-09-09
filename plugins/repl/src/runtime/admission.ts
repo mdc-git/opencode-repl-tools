@@ -16,7 +16,7 @@ function cleanupError(cell: Cell): string {
 }
 
 function hasActiveJob(cell: Cell): boolean {
-  const active = cell.active
+  const { active } = cell
   return active !== undefined && !terminal(active.state)
 }
 
@@ -24,9 +24,11 @@ function lifecycleError(cell: Cell, language: Language): JobOperationOutput | un
   if (cell.lifecycle === 'failed') {
     return expected('lifecycle', cleanupError(cell))
   }
+
   if (cell.lifecycle === 'retiring') {
     return expected('lifecycle', `${language} Cell is retiring its interpreter`)
   }
+
   return undefined
 }
 
@@ -37,13 +39,16 @@ function admissionError(
   if (cell === undefined) {
     return undefined
   }
+
   const denied = lifecycleError(cell, language)
   if (denied !== undefined) {
     return denied
   }
+
   if (hasActiveJob(cell)) {
     return expected('busy', `${language} Cell already has an active job`)
   }
+
   return undefined
 }
 
@@ -70,6 +75,7 @@ function getOrCreateCell(
   if (existing !== undefined) {
     return Effect.succeed(existing)
   }
+
   return state
     .createCell(request.sessionID, request.language, request.directory)
     .pipe(Effect.tap((cell) => Effect.sync(() => map.set(key, cell))))
@@ -79,6 +85,7 @@ function ensureCellScope(state: RuntimeState, cell: Cell): Effect.Effect<void> {
   if (cell.scope.state._tag !== 'Closed') {
     return Effect.void
   }
+
   return Scope.fork(state.activationScope).pipe(
     Effect.tap((scope) =>
       Effect.sync(() => {
@@ -100,11 +107,13 @@ export function admitEvaluation(
       if (!state.activationOpen()) {
         return { error: expected('lifecycle', 'plugin activation is closed') } as const
       }
+
       const existing = map.get(cellKey(context.sessionID, language))
       const denied = admissionError(existing, language)
       if (denied !== undefined) {
         return { error: denied } as const
       }
+
       const cell = yield* getOrCreateCell(state, map, {
         sessionID: context.sessionID,
         language,

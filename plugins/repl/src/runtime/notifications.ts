@@ -15,12 +15,15 @@ function canNotifyTerminal(cell: Cell, job: Job): boolean {
   if (notificationSuppressed(cell, job)) {
     return false
   }
+
   if (job.terminalNotificationDone) {
     return false
   }
+
   if (!job.backgrounded) {
     return false
   }
+
   return terminalNotificationState(job)
 }
 
@@ -43,12 +46,15 @@ function canNotifyInput(job: Job, serial: number): boolean {
   if (inputNotificationBlocked(job)) {
     return false
   }
+
   if (job.state !== 'waiting_input') {
     return false
   }
+
   if (job.inputSerial !== serial) {
     return false
   }
+
   return job.inputNotificationSerial < serial
 }
 
@@ -74,6 +80,7 @@ export function notifyTerminal(state: RuntimeState, cell: Cell, job: Job): Effec
     if (!sameCell(map, cell) || !canNotifyTerminal(cell, job)) {
       return Effect.void
     }
+
     job.terminalNotificationDone = true
     return state.ctx.session
       .synthetic({
@@ -100,6 +107,7 @@ export function notifyInput(
     if (!sameCell(map, cell) || cell.notificationsSuppressed || !canNotifyInput(job, serial)) {
       return Effect.void
     }
+
     job.inputNotificationSerial = serial
     return state.ctx.session
       .synthetic({

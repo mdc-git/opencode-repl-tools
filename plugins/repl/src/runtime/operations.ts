@@ -30,28 +30,38 @@ function foregroundRemaining(job: Job): number {
 
 async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal: AbortSignal) {
   return new Promise<'wake' | 'timeout'>((resolve) => {
-    let done = false
+    let isDone = false
     const finish = (value: 'wake' | 'timeout') => {
-      if (done) {
+      if (isDone) {
         return
       }
-      done = true
+
+      isDone = true
       clearTimeout(timer)
       signal.removeEventListener('abort', onAbort)
       resolve(value)
     }
+
     const onAbort = () => {
       if (job.backgrounded || terminal(job.state)) {
         return
       }
+
       job.notificationSuppressed = true
       state.dispatch(cancelWork(state, cell, job).pipe(Effect.asVoid))
     }
-    const timer = setTimeout(() => finish('timeout'), foregroundRemaining(job))
+
+    const timer = setTimeout(() => {
+      finish('timeout')
+    }, foregroundRemaining(job))
     signal.addEventListener('abort', onAbort, { once: true })
     void job.foreground.promise.then(
-      () => finish('wake'),
-      () => finish('wake')
+      () => {
+        finish('wake')
+      },
+      () => {
+        finish('wake')
+      }
     )
   })
 }
@@ -61,10 +71,12 @@ function foregroundSnapshot(cell: Cell, job: Job): JobOperationOutput {
     job.terminalNotificationDone = true
     return snapshot(cell, job, job.startCursor, true)
   }
+
   job.backgrounded = true
   if (job.state === 'waiting_input') {
     job.inputNotificationSerial = job.inputSerial
   }
+
   return snapshot(cell, job, job.startCursor, true)
 }
 
@@ -75,6 +87,7 @@ function evaluate(state: RuntimeState): ReplRuntime['evaluate'] {
       if (!validation.ok) {
         return expected(validation.error.kind, validation.error.message)
       }
+
       const admitted = yield* admitEvaluation(
         state,
         language,
@@ -84,6 +97,7 @@ function evaluate(state: RuntimeState): ReplRuntime['evaluate'] {
       if ('error' in admitted) {
         return admitted.error
       }
+
       yield* runJob(state, admitted.cell, admitted.job, code).pipe(
         Effect.forkIn(admitted.cell.scope)
       )
@@ -101,10 +115,12 @@ function findInCell(cell: Cell | undefined, id: string): FoundJob | undefined {
   if (cell === undefined) {
     return undefined
   }
+
   const job = findJob(cell, id)
   if (job === undefined) {
     return undefined
   }
+
   return { cell, job }
 }
 
@@ -117,6 +133,7 @@ function findSessionJob(
   if (node !== undefined) {
     return node
   }
+
   return findInCell(map.get(cellKey(sessionID, 'python')), id)
 }
 
@@ -125,6 +142,7 @@ function statusOperation(found: FoundJob, input: Extract<JobInput, { action: 'st
   if (!Number.isSafeInteger(cursor) || cursor < 0) {
     return expected('invalid_state', 'cursor must be a non-negative integer')
   }
+
   return snapshot(found.cell, found.job, cursor)
 }
 
@@ -136,21 +154,25 @@ function stdinAllowed(found: FoundJob): boolean {
   if (found.cell.active !== found.job) {
     return false
   }
+
   if (found.cell.interpreter === undefined) {
     return false
   }
+
   if (found.job.language === 'python') {
     return found.job.state === 'waiting_input'
   }
+
   return nodeStdinAllowed(found.job)
 }
 
 async function sendStdin(found: FoundJob, data: string) {
   try {
-    const interpreter = found.cell.interpreter
+    const { interpreter } = found.cell
     if (interpreter === undefined) {
       throw new Error('REPL interpreter is unavailable')
     }
+
     await interpreter.stdin(found.job.id, data)
     return { ok: true as const }
   } catch (error) {
@@ -162,6 +184,7 @@ function resumePythonAfterInput(found: FoundJob): void {
   if (found.job.language !== 'python' || found.job.state !== 'waiting_input') {
     return
   }
+
   found.job.state = 'running'
   found.job.prompt = undefined
   found.job.password = undefined
@@ -180,12 +203,18 @@ function stdinOperation(
       )
     )
   }
+
   return Effect.gen(function* () {
-    const sent = yield* Effect.promise(() => sendStdin(found, input.data))
+    const sent = yield* Effect.promise(async () => sendStdin(found, input.data))
     if (!sent.ok) {
       return expected('runtime', `stdin failed: ${errorMessage(sent.error)}`)
     }
-    yield* state.locked(() => Effect.sync(() => resumePythonAfterInput(found)))
+
+    yield* state.locked(() =>
+      Effect.sync(() => {
+        resumePythonAfterInput(found)
+      })
+    )
     return snapshot(found.cell, found.job, found.job.startCursor, true)
   })
 }
@@ -194,11 +223,13 @@ function cancelOperation(state: RuntimeState, found: FoundJob): Effect.Effect<Jo
   if (terminal(found.job.state)) {
     return Effect.succeed(snapshot(found.cell, found.job, found.job.startCursor, true))
   }
+
   if (found.cell.lifecycle === 'failed') {
     return Effect.succeed(
       expected('lifecycle', found.cell.cleanupError ?? 'Cell teardown is unconfirmed')
     )
   }
+
   return Effect.gen(function* () {
     const fiber = yield* cancelWork(state, found.cell, found.job).pipe(
       Effect.forkIn(state.activationScope)
@@ -211,9 +242,11 @@ function operateFound(state: RuntimeState, found: FoundJob, input: JobInput) {
   if (input.action === 'status') {
     return Effect.succeed(statusOperation(found, input))
   }
+
   if (input.action === 'stdin') {
     return stdinOperation(state, found, input)
   }
+
   return cancelOperation(state, found)
 }
 
@@ -224,12 +257,14 @@ function jobOperation(state: RuntimeState): ReplRuntime['job'] {
       if (!validation.ok) {
         return expected(validation.error.kind, validation.error.message)
       }
+
       const found = yield* state.locked((map) =>
         Effect.sync(() => findSessionJob(map, context.sessionID, input.id))
       )
       if (found === undefined) {
         return expected('not_found', `job ${input.id} was not found in this OpenCode session`)
       }
+
       return yield* operateFound(state, found, input)
     })
 }
@@ -241,12 +276,14 @@ function resetOperation(state: RuntimeState): ReplRuntime['reset'] {
       if (!validation.ok) {
         return { ok: false, error: validation.error }
       }
+
       const cell = yield* state.locked((map) =>
         Effect.sync(() => state.getCell(map, context.sessionID, language))
       )
       if (cell === undefined) {
         return { ok: true, language }
       }
+
       const fiber = yield* resetCell(state, cell).pipe(Effect.forkIn(state.activationScope))
       return yield* Fiber.join(fiber)
     })
@@ -260,10 +297,12 @@ function takeSessionCells(map: Map<string, Cell>, sessionID: ToolCallContext['se
     if (cell === undefined) {
       continue
     }
+
     cell.notificationsSuppressed = true
     targets.push(cell)
     map.delete(key)
   }
+
   return targets
 }
 
@@ -273,6 +312,7 @@ export function takeAllCells(map: Map<string, Cell>): Cell[] {
   for (const cell of values) {
     cell.notificationsSuppressed = true
   }
+
   return values
 }
 

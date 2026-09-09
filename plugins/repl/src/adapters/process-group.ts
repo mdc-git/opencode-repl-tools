@@ -18,6 +18,7 @@ function errorCode(error: unknown): unknown {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined
   }
+
   return error.code
 }
 
@@ -38,9 +39,11 @@ async function waitUntilGone(pid: number, deadline: number): Promise<boolean> {
   if (!groupExists(pid)) {
     return true
   }
+
   if (Date.now() >= deadline) {
     return false
   }
+
   await sleep(25)
   return waitUntilGone(pid, deadline)
 }
@@ -72,10 +75,12 @@ async function forceRetire(pid: number, options: RetireOptions): Promise<Cleanup
   if (await waitGroupGone(pid, options.termWaitMs)) {
     return { confirmed: true }
   }
+
   signalProcessGroup(pid, 'SIGKILL')
   if (await waitGroupGone(pid, options.killWaitMs)) {
     return { confirmed: true }
   }
+
   return {
     confirmed: false,
     message: `${options.label} process group ${pid} is still observable after SIGKILL`
@@ -86,25 +91,29 @@ export async function retireProcessGroup(
   child: ChildProcess,
   options: RetireOptions
 ): Promise<CleanupResult> {
-  const pid = child.pid
+  const { pid } = child
   if (pid === undefined) {
     return { confirmed: true }
   }
+
   if (!groupExists(pid)) {
     return { confirmed: true }
   }
+
   runOrderly(options.orderly)
   if (await waitGroupGone(pid, options.orderlyWaitMs)) {
     return { confirmed: true }
   }
+
   return forceRetire(pid, options)
 }
 
 export async function killProcessGroup(child: ChildProcess, waitMs: number): Promise<void> {
-  const pid = child.pid
+  const { pid } = child
   if (pid === undefined) {
     return
   }
+
   signalProcessGroup(pid, 'SIGKILL')
   await waitGroupGone(pid, waitMs)
 }

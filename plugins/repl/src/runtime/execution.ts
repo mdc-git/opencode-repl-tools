@@ -33,6 +33,7 @@ function onNodeEvent(state: RuntimeState, cell: Cell, event: NodeEvent): void {
     cell.transcript.append(event.stream, event.text, event.jobId)
     return
   }
+
   state.dispatch(handleFatal(state, cell, event.message))
 }
 
@@ -44,9 +45,11 @@ function updateWaitingInput(
   if (job === undefined || job.id !== event.jobId) {
     return undefined
   }
+
   if (terminal(job.state)) {
     return undefined
   }
+
   job.state = 'waiting_input'
   job.prompt = event.prompt
   job.password = event.password
@@ -75,6 +78,7 @@ function onPythonEvent(state: RuntimeState, cell: Cell, event: PythonEvent): voi
     cell.transcript.append(event.stream, event.text, event.jobId)
     return
   }
+
   const effect =
     event.type === 'fatal'
       ? handleFatal(state, cell, event.message)
@@ -95,12 +99,16 @@ async function startInterpreter(
             command: state.nodeCommand,
             cwd: cell.directory,
             signal,
-            onEvent: (event) => onNodeEvent(state, cell, event)
+            onEvent(event) {
+              onNodeEvent(state, cell, event)
+            }
           })
         : await state.python.start({
             cwd: cell.directory,
             signal,
-            onEvent: (event) => onPythonEvent(state, cell, event)
+            onEvent(event) {
+              onPythonEvent(state, cell, event)
+            }
           })
     return { ok: true, value }
   } catch (error) {
@@ -117,10 +125,12 @@ function recordStartupFailure(cell: Cell, job: Job, failure: StartupFailure): vo
     finishJob(cell, job, 'failed', { kind: 'lifecycle', message: cell.cleanupError })
     return
   }
+
   if (job.cancelRequested) {
     finishJob(cell, job, 'cancelled')
     return
   }
+
   cell.lifecycle = 'healthy'
   finishJob(cell, job, 'failed', { kind: 'startup', message: errorMessage(failure.error) })
 }
@@ -138,12 +148,15 @@ function acceptInterpreter(
   if (!sameCell(map, cell)) {
     return false
   }
+
   if (cell.active !== job) {
     return false
   }
+
   if (interpreterBlocked(cell)) {
     return false
   }
+
   cell.interpreter = interpreter
   cell.lifecycle = 'live'
   job.state = 'running'
@@ -154,6 +167,7 @@ function markExistingRunning(cell: Cell, job: Job): void {
   if (cell.active !== job || terminal(job.state)) {
     return
   }
+
   cell.lifecycle = 'live'
   job.state = 'running'
 }
@@ -162,9 +176,11 @@ function startupDiagnostic(cell: Cell, job: Job, error: unknown): void {
   if (!(error instanceof PythonStartupError)) {
     return
   }
+
   if (error.diagnosticTail === undefined) {
     return
   }
+
   cell.transcript.append('system', error.diagnosticTail, job.id)
 }
 
@@ -178,25 +194,33 @@ function installInterpreter(
     job.startupAbort = startupAbort
     yield* Scope.addFinalizer(
       cell.scope,
-      Effect.sync(() => startupAbort.abort())
+      Effect.sync(() => {
+        startupAbort.abort()
+      })
     )
-    const started = yield* Effect.promise(() =>
+    const started = yield* Effect.promise(async () =>
       startInterpreter(state, cell, job, startupAbort.signal)
     )
     job.startupAbort = undefined
     if (!started.ok) {
       startupDiagnostic(cell, job, started.error)
-      yield* state.locked(() => Effect.sync(() => recordStartupFailure(cell, job, started)))
+      yield* state.locked(() =>
+        Effect.sync(() => {
+          recordStartupFailure(cell, job, started)
+        })
+      )
       yield* notifyTerminal(state, cell, job)
       return undefined
     }
-    const accepted = yield* state.locked((map) =>
+
+    const isAccepted = yield* state.locked((map) =>
       Effect.sync(() => acceptInterpreter(map, cell, job, started.value))
     )
-    if (!accepted) {
+    if (!isAccepted) {
       yield* Effect.promise(async () => safeShutdown(started.value).then(() => undefined))
       return undefined
     }
+
     yield* Scope.addFinalizer(
       cell.scope,
       Effect.promise(async () => safeShutdown(started.value).then(() => undefined))
@@ -212,9 +236,14 @@ function interpreterForJob(
 ): Effect.Effect<Interpreter | undefined> {
   if (cell.interpreter !== undefined) {
     return state
-      .locked(() => Effect.sync(() => markExistingRunning(cell, job)))
+      .locked(() =>
+        Effect.sync(() => {
+          markExistingRunning(cell, job)
+        })
+      )
       .pipe(Effect.as(cell.interpreter))
   }
+
   return installInterpreter(state, cell, job)
 }
 
@@ -230,6 +259,7 @@ function interpreterFailureMessage(error: { readonly message: string } | undefin
   if (error !== undefined) {
     return error.message
   }
+
   return 'interpreter evaluation failed'
 }
 
@@ -240,9 +270,11 @@ function evaluationOutcome(result: Awaited<ReturnType<typeof evaluateInterpreter
       error: { kind: 'runtime' as const, message: errorMessage(result.error) }
     }
   }
+
   if (result.result.ok) {
     return { state: 'succeeded' as const, error: undefined }
   }
+
   const message = interpreterFailureMessage(result.result.error)
   return { state: 'failed' as const, error: { kind: 'runtime' as const, message } }
 }
@@ -255,13 +287,16 @@ function completeEvaluation(
   if (cell.active !== job) {
     return
   }
+
   if (terminal(job.state)) {
     return
   }
+
   if (job.cancelRequested) {
     finishJob(cell, job, 'cancelled')
     return
   }
+
   const outcome = evaluationOutcome(result)
   finishJob(cell, job, outcome.state, outcome.error)
 }
@@ -277,8 +312,13 @@ export function runJob(
     if (interpreter === undefined) {
       return
     }
+
     const result = yield* Effect.promise(async () => evaluateInterpreter(interpreter, job, code))
-    yield* state.locked(() => Effect.sync(() => completeEvaluation(cell, job, result)))
+    yield* state.locked(() =>
+      Effect.sync(() => {
+        completeEvaluation(cell, job, result)
+      })
+    )
     yield* notifyTerminal(state, cell, job)
     if (!interpreter.alive()) {
       yield* handleFatal(state, cell, 'interpreter exited during evaluation')
