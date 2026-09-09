@@ -268,10 +268,10 @@ export class PythonEnvironment {
   }
 }
 
-export function parsePythonVersion(version: string): PythonVersion | undefined {
+function parsePythonVersion(version: string): PythonVersion | undefined {
   return parseVersion(version)
 }
 
-export function isSupportedPython(version: PythonVersion | undefined): boolean {
+function isSupportedPython(version: PythonVersion | undefined): boolean {
   return isSupportedVersion(version)
 }
