@@ -30,7 +30,7 @@ async function createConnection(child: ChildProcess, onEvent: (event: NodeEvent)
     }
 
     const message = errorMessage(error)
-    throw new NodeStartupError(message, false, async () => retirement(child))
+    throw new NodeStartupError(message, async () => retirement(child))
   }
 }
 
@@ -57,6 +57,6 @@ export async function startNodeInterpreter(options: {
     }
 
     const message = errorMessage(error)
-    throw new NodeStartupError(message, false, async () => connection.shutdown())
+    throw new NodeStartupError(message, async () => connection.shutdown())
   }
 }
