@@ -82,7 +82,7 @@ function transpile(code) {
     (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error
   )
   if (errors.length > 0) {
-    throw new SyntaxError(errors.map(diagnosticText).join('\n'))
+    throw new SyntaxError(errors.map((diagnostic) => diagnosticText(diagnostic)).join('\n'))
   }
 
   return result.outputText
@@ -134,8 +134,6 @@ function handleReplError(error) {
   return 'ignore'
 }
 
-globalThis.require = createRequire(path.join(sessionDirectory, '__opencode_repl__.js'))
-
 const server = repl.start({
   prompt: '',
   input: replInput,
@@ -147,6 +145,7 @@ const server = repl.start({
   breakEvalOnSigint: true,
   handleError: handleReplError
 })
+server.context.require = createRequire(path.join(sessionDirectory, '__opencode_repl__.js'))
 
 function renderResult(jobId, result) {
   if (result === undefined) {

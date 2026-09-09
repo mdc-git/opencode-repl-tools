@@ -16,18 +16,18 @@ import type {
 import type { OutputRing } from '../output-ring.ts'
 
 export const TRANSCRIPT_BYTES = 1024 * 1024
-export const HISTORY_LIMIT = 20
+const HISTORY_LIMIT = 20
 export const PREVIEW_BYTES = 16 * 1024
-export const FOREGROUND_MS = 5000
-export const CANCEL_GRACE_MS = 2000
+export const FOREGROUND_MS = 5_000
+export const CANCEL_GRACE_MS = 2_000
 
-export type SessionID = Parameters<Plugin.Context['session']['get']>[0]['sessionID']
-export type ToolCallContext = { readonly sessionID: SessionID }
+export type SessionId = Parameters<Plugin.Context['session']['get']>[0]['sessionID']
+export type ToolCallContext = { readonly sessionID: SessionId }
 export type Interpreter = NodeInterpreter | PythonInterpreter
 export type CleanupRetry = () => Promise<CleanupResult>
-export type CellLifecycle = 'healthy' | 'starting' | 'live' | 'retiring' | 'failed'
+type CellLifecycle = 'healthy' | 'starting' | 'live' | 'retiring' | 'failed'
 
-export type SignalPair = {
+type SignalPair = {
   readonly promise: Promise<void>
   readonly resolve: () => void
 }
@@ -53,7 +53,7 @@ export type Job = {
 }
 
 export type Cell = {
-  readonly sessionID: SessionID
+  readonly sessionID: SessionId
   readonly language: Language
   readonly directory: string
   readonly transcript: OutputRing
@@ -75,15 +75,12 @@ export type ReplRuntime = {
   ) => Effect.Effect<JobOperationOutput>
   readonly job: (input: JobInput, context: ToolCallContext) => Effect.Effect<JobOperationOutput>
   readonly reset: (language: Language, context: ToolCallContext) => Effect.Effect<ResetOutput>
-  readonly invalidateSession: (sessionID: SessionID) => Effect.Effect<void>
+  readonly invalidateSession: (sessionID: SessionId) => Effect.Effect<void>
 }
 
-export function signalPair(): SignalPair {
+function signalPair(): SignalPair {
   let isSettled = false
-  let resolvePromise!: () => void
-  const promise = new Promise<void>((resolve) => {
-    resolvePromise = resolve
-  })
+  const { promise, resolve: resolvePromise } = Promise.withResolvers<void>()
   return {
     promise,
     resolve() {
@@ -97,8 +94,10 @@ export function signalPair(): SignalPair {
   }
 }
 
-export function terminal(state: JobState): boolean {
-  return state === 'succeeded' || state === 'failed' || state === 'cancelled'
+const TERMINAL_STATES: readonly JobState[] = ['succeeded', 'failed', 'cancelled']
+
+export function isTerminal(state: JobState): boolean {
+  return TERMINAL_STATES.includes(state)
 }
 
 export function expected(kind: ErrorKind, message: string): JobOperationOutput {
@@ -118,11 +117,11 @@ export function errorMessage(error: unknown): string {
   return typeof value === 'string' ? value : String(error)
 }
 
-export function cellKey(sessionID: SessionID, language: Language): string {
-  return `${sessionID}\0${language}`
+export function cellKey(sessionID: SessionId, language: Language): string {
+  return `${String(sessionID)}\0${language}`
 }
 
-export function sameCell(map: Map<string, Cell>, cell: Cell): boolean {
+export function isSameCell(map: Map<string, Cell>, cell: Cell): boolean {
   return map.get(cellKey(cell.sessionID, cell.language)) === cell
 }
 
@@ -161,7 +160,7 @@ export function finishJob(
   state: Extract<JobState, 'succeeded' | 'failed' | 'cancelled'>,
   error?: ReplError
 ): void {
-  if (terminal(job.state)) {
+  if (isTerminal(job.state)) {
     return
   }
 
@@ -218,7 +217,7 @@ export function startupCleanup(error: unknown): {
     return { unconfirmed: false }
   }
 
-  if (startupError.cleanupConfirmed !== false) {
+  if (startupError.isCleanupConfirmed !== false) {
     return { unconfirmed: false }
   }
 

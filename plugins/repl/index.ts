@@ -9,7 +9,7 @@ import {
   resetOutputSchema
 } from './src/model.ts'
 import { makeRuntime, type ReplRuntime } from './src/runtime.ts'
-import type { SessionID } from './src/runtime/types.ts'
+import type { SessionId } from './src/runtime/types.ts'
 
 const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
 
@@ -67,7 +67,7 @@ function invalidationEffect(
     return Effect.void
   }
 
-  return runtime.invalidateSession(event.sessionID as SessionID)
+  return runtime.invalidateSession(event.sessionID as SessionId)
 }
 
 const replPlugin = Plugin.define({

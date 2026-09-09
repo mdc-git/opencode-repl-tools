@@ -2,7 +2,7 @@ import { Effect, Exit, Scope } from 'effect'
 import type { CleanupResult } from '../adapters/process-group.ts'
 import { safeRetry, safeShutdown } from './cleanup.ts'
 import type { RuntimeState } from './state.ts'
-import { terminal, type Cell } from './types.ts'
+import { isTerminal, type Cell } from './types.ts'
 
 function abortStartup(cell: Cell): void {
   if (cell.active?.startupAbort !== undefined) {
@@ -13,7 +13,7 @@ function abortStartup(cell: Cell): void {
 function suppressCell(cell: Cell): void {
   cell.notificationsSuppressed = true
   const { active } = cell
-  if (active === undefined || terminal(active.state)) {
+  if (active === undefined || isTerminal(active.state)) {
     return
   }
 
@@ -42,7 +42,7 @@ function warnCleanup(state: RuntimeState, cell: Cell, result: CleanupResult | un
   }
 
   return Effect.logWarning('REPL lifecycle cleanup could not be confirmed', {
-    sessionID: cell.sessionID,
+    ['sessionID']: cell.sessionID,
     language: cell.language,
     error: result.message
   })

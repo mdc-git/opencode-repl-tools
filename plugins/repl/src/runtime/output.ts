@@ -9,7 +9,12 @@ export function utf8Tail(text: string, maxBytes: number): string {
   }
 
   let start = buffer.length - maxBytes
-  while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
+  while (start < buffer.length) {
+    const byte = buffer[start]
+    if (byte === undefined || byte < 0x80 || byte > 0xbf) {
+      break
+    }
+
     start += 1
   }
 
@@ -41,7 +46,7 @@ function previewChunks(chunks: readonly OutputChunk[], maxBytes: number) {
   }
 
   return {
-    chunks: reversed.reverse(),
+    chunks: reversed.toReversed(),
     truncated: reversed.length < chunks.length
   }
 }
@@ -73,8 +78,8 @@ function selectedCursor(job: Job, cursor: number | undefined): number {
   return cursor ?? job.startCursor
 }
 
-function selectedChunks(chunks: readonly OutputChunk[], preview: boolean | undefined) {
-  if (preview === true) {
+function selectedChunks(chunks: readonly OutputChunk[], isPreview: boolean | undefined) {
+  if (isPreview === true) {
     return previewChunks(chunks, PREVIEW_BYTES)
   }
 
@@ -85,9 +90,9 @@ function withError(error: JobStatus['error']): Pick<JobStatus, 'error'> {
   return error === undefined ? {} : { error }
 }
 
-export function snapshot(cell: Cell, job: Job, cursor?: number, preview?: boolean): JobStatus {
+export function snapshot(cell: Cell, job: Job, cursor?: number, isPreview?: boolean): JobStatus {
   const read = cell.transcript.read(selectedCursor(job, cursor))
-  const limited = selectedChunks(read.chunks, preview)
+  const limited = selectedChunks(read.chunks, isPreview)
   return {
     ok: true,
     id: job.id,

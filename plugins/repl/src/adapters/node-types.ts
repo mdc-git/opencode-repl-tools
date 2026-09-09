@@ -4,7 +4,7 @@ import type { CleanupResult } from './process-group.ts'
 export class NodeStartupError extends Error {
   constructor(
     message: string,
-    readonly cleanupConfirmed: boolean,
+    readonly isCleanupConfirmed: boolean,
     readonly retryCleanup?: () => Promise<CleanupResult>
   ) {
     super(message)

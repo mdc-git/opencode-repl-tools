@@ -12,7 +12,7 @@ import {
   errorMessage,
   expected,
   findJob,
-  terminal,
+  isTerminal,
   type Cell,
   type Job,
   type ReplRuntime,
@@ -43,7 +43,7 @@ async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal:
     }
 
     const onAbort = () => {
-      if (job.backgrounded || terminal(job.state)) {
+      if (job.backgrounded || isTerminal(job.state)) {
         return
       }
 
@@ -55,19 +55,14 @@ async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal:
       finish('timeout')
     }, foregroundRemaining(job))
     signal.addEventListener('abort', onAbort, { once: true })
-    void job.foreground.promise.then(
-      () => {
-        finish('wake')
-      },
-      () => {
-        finish('wake')
-      }
-    )
+    void job.foreground.promise.then(() => {
+      finish('wake')
+    })
   })
 }
 
 function foregroundSnapshot(cell: Cell, job: Job): JobOperationOutput {
-  if (terminal(job.state)) {
+  if (isTerminal(job.state)) {
     job.terminalNotificationDone = true
     return snapshot(cell, job, job.startCursor, true)
   }
@@ -146,11 +141,11 @@ function statusOperation(found: FoundJob, input: Extract<JobInput, { action: 'st
   return snapshot(found.cell, found.job, cursor)
 }
 
-function nodeStdinAllowed(job: Job): boolean {
-  return !terminal(job.state) && job.state !== 'starting'
+function isNodeStdinAllowed(job: Job): boolean {
+  return !isTerminal(job.state) && job.state !== 'starting'
 }
 
-function stdinAllowed(found: FoundJob): boolean {
+function isStdinAllowed(found: FoundJob): boolean {
   if (found.cell.active !== found.job) {
     return false
   }
@@ -163,7 +158,7 @@ function stdinAllowed(found: FoundJob): boolean {
     return found.job.state === 'waiting_input'
   }
 
-  return nodeStdinAllowed(found.job)
+  return isNodeStdinAllowed(found.job)
 }
 
 async function sendStdin(found: FoundJob, data: string) {
@@ -195,7 +190,7 @@ function stdinOperation(
   found: FoundJob,
   input: Extract<JobInput, { action: 'stdin' }>
 ): Effect.Effect<JobOperationOutput> {
-  if (!stdinAllowed(found)) {
+  if (!isStdinAllowed(found)) {
     return Effect.succeed(
       expected(
         'invalid_state',
@@ -220,7 +215,7 @@ function stdinOperation(
 }
 
 function cancelOperation(state: RuntimeState, found: FoundJob): Effect.Effect<JobOperationOutput> {
-  if (terminal(found.job.state)) {
+  if (isTerminal(found.job.state)) {
     return Effect.succeed(snapshot(found.cell, found.job, found.job.startCursor, true))
   }
 
@@ -307,7 +302,7 @@ function takeSessionCells(map: Map<string, Cell>, sessionID: ToolCallContext['se
 }
 
 export function takeAllCells(map: Map<string, Cell>): Cell[] {
-  const values = [...map.values()]
+  const values = Array.from(map.values())
   map.clear()
   for (const cell of values) {
     cell.notificationsSuppressed = true

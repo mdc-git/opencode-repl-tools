@@ -1,18 +1,18 @@
 import { Effect } from 'effect'
-import type { RuntimeState } from './state.ts'
-import { PREVIEW_BYTES, errorMessage, sameCell, type Cell, type Job } from './types.ts'
 import { utf8Tail } from './output.ts'
+import type { RuntimeState } from './state.ts'
+import { PREVIEW_BYTES, errorMessage, isSameCell, type Cell, type Job } from './types.ts'
 
-function notificationSuppressed(cell: Cell, job: Job): boolean {
+function isNotificationSuppressed(cell: Cell, job: Job): boolean {
   return cell.notificationsSuppressed || job.notificationSuppressed
 }
 
-function terminalNotificationState(job: Job): boolean {
+function isTerminalNotificationState(job: Job): boolean {
   return job.state === 'succeeded' || job.state === 'failed'
 }
 
 function canNotifyTerminal(cell: Cell, job: Job): boolean {
-  if (notificationSuppressed(cell, job)) {
+  if (isNotificationSuppressed(cell, job)) {
     return false
   }
 
@@ -24,7 +24,7 @@ function canNotifyTerminal(cell: Cell, job: Job): boolean {
     return false
   }
 
-  return terminalNotificationState(job)
+  return isTerminalNotificationState(job)
 }
 
 function terminalText(cell: Cell, job: Job): string {
@@ -38,12 +38,12 @@ function terminalText(cell: Cell, job: Job): string {
   ].join('\n')
 }
 
-function inputNotificationBlocked(job: Job): boolean {
+function isInputNotificationBlocked(job: Job): boolean {
   return job.notificationSuppressed || !job.backgrounded
 }
 
 function canNotifyInput(job: Job, serial: number): boolean {
-  if (inputNotificationBlocked(job)) {
+  if (isInputNotificationBlocked(job)) {
     return false
   }
 
@@ -69,7 +69,7 @@ function inputText(job: Job): string {
 
 function deliveryFailure(label: string, cell: Cell, job: Job, error: unknown): Effect.Effect<void> {
   return Effect.logWarning(label, {
-    sessionID: cell.sessionID,
+    ['sessionID']: cell.sessionID,
     jobId: job.id,
     error: errorMessage(error)
   })
@@ -77,14 +77,14 @@ function deliveryFailure(label: string, cell: Cell, job: Job, error: unknown): E
 
 export function notifyTerminal(state: RuntimeState, cell: Cell, job: Job): Effect.Effect<void> {
   return state.locked((map) => {
-    if (!sameCell(map, cell) || !canNotifyTerminal(cell, job)) {
+    if (!isSameCell(map, cell) || !canNotifyTerminal(cell, job)) {
       return Effect.void
     }
 
     job.terminalNotificationDone = true
     return state.ctx.session
       .synthetic({
-        sessionID: cell.sessionID,
+        ['sessionID']: cell.sessionID,
         text: terminalText(cell, job),
         resume: true
       })
@@ -104,14 +104,14 @@ export function notifyInput(
   serial: number
 ): Effect.Effect<void> {
   return state.locked((map) => {
-    if (!sameCell(map, cell) || cell.notificationsSuppressed || !canNotifyInput(job, serial)) {
+    if (!isSameCell(map, cell) || cell.notificationsSuppressed || !canNotifyInput(job, serial)) {
       return Effect.void
     }
 
     job.inputNotificationSerial = serial
     return state.ctx.session
       .synthetic({
-        sessionID: cell.sessionID,
+        ['sessionID']: cell.sessionID,
         text: inputText(job),
         resume: true
       })

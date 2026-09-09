@@ -10,9 +10,9 @@ import {
   errorMessage,
   expected,
   finishJob,
+  isSameCell,
+  isTerminal,
   resetError,
-  sameCell,
-  terminal,
   type Cell,
   type Interpreter,
   type Job
@@ -25,6 +25,11 @@ type CancelPreparation =
   | { readonly kind: 'starting' }
   | { readonly kind: 'active'; readonly interpreter: Interpreter }
 
+type ImmediateCancelPreparation = Extract<
+  CancelPreparation,
+  { readonly kind: 'gone' | 'failed' | 'terminal' }
+>
+
 function cleanupError(cell: Cell, fallback: string): string {
   return cell.cleanupError ?? fallback
 }
@@ -34,11 +39,11 @@ function existingCancelState(
   cell: Cell,
   job: Job
 ): CancelPreparation | undefined {
-  if (!sameCell(map, cell)) {
+  if (!isSameCell(map, cell)) {
     return { kind: 'gone' }
   }
 
-  if (terminal(job.state)) {
+  if (isTerminal(job.state)) {
     return { kind: 'terminal' }
   }
 
@@ -87,12 +92,14 @@ async function interruptWithGrace(cell: Cell, job: Job, interpreter: Interpreter
 
   await Promise.race([
     job.completion.promise,
-    new Promise<void>((resolve) => setTimeout(resolve, CANCEL_GRACE_MS))
+    new Promise<void>((resolve) => {
+      setTimeout(resolve, CANCEL_GRACE_MS)
+    })
   ])
 }
 
 function markCancelRetiring(map: Map<string, Cell>, cell: Cell) {
-  if (!sameCell(map, cell)) {
+  if (!isSameCell(map, cell)) {
     return undefined
   }
 
@@ -152,7 +159,11 @@ function hardRetireForCancel(
   })
 }
 
-function preparedCancelResult(cell: Cell, job: Job, prepared: CancelPreparation) {
+function preparedCancelResult(
+  cell: Cell,
+  job: Job,
+  prepared: ImmediateCancelPreparation
+): JobOperationOutput {
   if (prepared.kind === 'gone') {
     return expected('not_found', `job ${job.id} was invalidated`)
   }
@@ -161,11 +172,7 @@ function preparedCancelResult(cell: Cell, job: Job, prepared: CancelPreparation)
     return expected('lifecycle', cleanupError(cell, 'Cell teardown is unconfirmed'))
   }
 
-  if (prepared.kind === 'terminal') {
-    return snapshot(cell, job, job.startCursor, true)
-  }
-
-  return undefined
+  return snapshot(cell, job, job.startCursor, true)
 }
 
 function waitStartingCancel(cell: Cell, job: Job): Effect.Effect<JobOperationOutput> {
@@ -179,7 +186,23 @@ function waitStartingCancel(cell: Cell, job: Job): Effect.Effect<JobOperationOut
 }
 
 function canReturnAfterInterrupt(job: Job, interpreter: Interpreter): boolean {
-  return terminal(job.state) && interpreter.alive()
+  return isTerminal(job.state) && interpreter.alive()
+}
+
+function cancelActive(
+  state: RuntimeState,
+  cell: Cell,
+  job: Job,
+  interpreter: Interpreter
+): Effect.Effect<JobOperationOutput> {
+  return Effect.gen(function* () {
+    yield* Effect.promise(async () => interruptWithGrace(cell, job, interpreter))
+    if (canReturnAfterInterrupt(job, interpreter)) {
+      return snapshot(cell, job, job.startCursor, true)
+    }
+
+    return yield* hardRetireForCancel(state, cell, job, interpreter)
+  })
 }
 
 export function cancelWork(
@@ -189,21 +212,15 @@ export function cancelWork(
 ): Effect.Effect<JobOperationOutput> {
   return Effect.gen(function* () {
     const prepared = yield* state.locked((map) => Effect.sync(() => prepareCancel(map, cell, job)))
-    const immediate = preparedCancelResult(cell, job, prepared)
-    if (immediate !== undefined) {
-      return immediate
-    }
-
     if (prepared.kind === 'starting') {
       return yield* waitStartingCancel(cell, job)
     }
 
-    yield* Effect.promise(async () => interruptWithGrace(cell, job, prepared.interpreter))
-    if (canReturnAfterInterrupt(job, prepared.interpreter)) {
-      return snapshot(cell, job, job.startCursor, true)
+    if (prepared.kind === 'active') {
+      return yield* cancelActive(state, cell, job, prepared.interpreter)
     }
 
-    return yield* hardRetireForCancel(state, cell, job, prepared.interpreter)
+    return preparedCancelResult(cell, job, prepared)
   })
 }
 
@@ -219,7 +236,7 @@ function suppressActive(active: Job | undefined): void {
     return
   }
 
-  if (terminal(active.state)) {
+  if (isTerminal(active.state)) {
     return
   }
 
@@ -229,7 +246,7 @@ function suppressActive(active: Job | undefined): void {
 }
 
 function prepareReset(map: Map<string, Cell>, cell: Cell): ResetPreparation | undefined {
-  if (!sameCell(map, cell)) {
+  if (!isSameCell(map, cell)) {
     return undefined
   }
 
@@ -277,7 +294,7 @@ function failReset(cell: Cell, cleanup: CleanupResult): string {
   const message = cleanup.message ?? 'reset could not confirm interpreter teardown'
   cell.lifecycle = 'failed'
   cell.cleanupError = message
-  if (cell.active !== undefined && !terminal(cell.active.state)) {
+  if (cell.active !== undefined && !isTerminal(cell.active.state)) {
     finishJob(cell, cell.active, 'failed', { kind: 'lifecycle', message })
   }
 
@@ -285,7 +302,7 @@ function failReset(cell: Cell, cleanup: CleanupResult): string {
 }
 
 function removeResetCell(map: Map<string, Cell>, cell: Cell): void {
-  if (cell.active !== undefined && !terminal(cell.active.state)) {
+  if (cell.active !== undefined && !isTerminal(cell.active.state)) {
     finishJob(cell, cell.active, 'cancelled')
   }
 

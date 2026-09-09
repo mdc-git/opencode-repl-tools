@@ -162,44 +162,10 @@ export class PythonConnection implements PythonInterpreter {
     }
   }
 
-  async waitUntilReady(signal: AbortSignal): Promise<string> {
-    const abortStartup = () => {
-      this.cancelStartup()
-    }
-    signal.addEventListener('abort', abortStartup, { once: true })
-    try {
-      return await this.ready
-    } finally {
-      signal.removeEventListener('abort', abortStartup)
-    }
-  }
-
   private cancelStartup(): void {
     this.shutdownRequested = true
     this.readyReject(new Error('Python REPL startup was cancelled'))
     void retirement(this.options.child)
-  }
-
-  async evaluate(jobId: string, code: string): Promise<PythonEvalResult> {
-    if (this.closed) {
-      throw new Error('Python broker is closed')
-    }
-
-    if (this.pending !== undefined) {
-      throw new Error('Python broker already has an active evaluation')
-    }
-
-    return new Promise((resolve, reject) => {
-      this.pending = { jobId, resolve, reject }
-      this.activeJobId = jobId
-      void this.send({ type: 'execute', jobId, code }).catch((error: unknown) => {
-        if (this.isPending(jobId)) {
-          this.clearPending()
-        }
-
-        reject(error instanceof Error ? error : new Error(errorMessage(error)))
-      })
-    })
   }
 
   private isPending(jobId: string): boolean {
@@ -212,33 +178,10 @@ export class PythonConnection implements PythonInterpreter {
     this.activeJobId = undefined
   }
 
-  async stdin(jobId: string, data: string): Promise<void> {
-    this.assertActive(jobId)
-    await this.send({ type: 'stdin', jobId, data })
-  }
-
-  async interrupt(jobId: string): Promise<void> {
-    this.assertActive(jobId)
-    await this.send({ type: 'interrupt', jobId })
-  }
-
   private assertActive(jobId: string): void {
     if (this.closed || this.activeJobId !== jobId) {
       throw new Error(`job ${jobId} is not the active Python evaluation`)
     }
-  }
-
-  async shutdown(): Promise<CleanupResult> {
-    if (this.shutdownPromise !== undefined) {
-      return this.shutdownPromise
-    }
-
-    this.shutdownRequested = true
-    const current = retirement(this.options.child, () => {
-      this.requestShutdown()
-    }).then((result) => this.accountForKernelAck(result))
-    this.shutdownPromise = current.then((result) => this.finishShutdown(result))
-    return this.shutdownPromise
   }
 
   private requestShutdown(): void {
@@ -281,11 +224,6 @@ export class PythonConnection implements PythonInterpreter {
     return result
   }
 
-  alive(): boolean {
-    const { child } = this.options
-    return !this.closed && child.exitCode === null && child.signalCode === null
-  }
-
   private async send(message: unknown): Promise<void> {
     if (this.closed) {
       throw new Error('Python broker is closed')
@@ -300,6 +238,68 @@ export class PythonConnection implements PythonInterpreter {
         }
       })
     })
+  }
+
+  async waitUntilReady(signal: AbortSignal): Promise<string> {
+    const abortStartup = () => {
+      this.cancelStartup()
+    }
+    signal.addEventListener('abort', abortStartup, { once: true })
+    try {
+      return await this.ready
+    } finally {
+      signal.removeEventListener('abort', abortStartup)
+    }
+  }
+
+  async evaluate(jobId: string, code: string): Promise<PythonEvalResult> {
+    if (this.closed) {
+      throw new Error('Python broker is closed')
+    }
+
+    if (this.pending !== undefined) {
+      throw new Error('Python broker already has an active evaluation')
+    }
+
+    return new Promise((resolve, reject) => {
+      this.pending = { jobId, resolve, reject }
+      this.activeJobId = jobId
+      void this.send({ type: 'execute', jobId, code }).catch((error: unknown) => {
+        if (this.isPending(jobId)) {
+          this.clearPending()
+        }
+
+        reject(error instanceof Error ? error : new Error(errorMessage(error)))
+      })
+    })
+  }
+
+  async stdin(jobId: string, data: string): Promise<void> {
+    this.assertActive(jobId)
+    await this.send({ type: 'stdin', jobId, data })
+  }
+
+  async interrupt(jobId: string): Promise<void> {
+    this.assertActive(jobId)
+    await this.send({ type: 'interrupt', jobId })
+  }
+
+  async shutdown(): Promise<CleanupResult> {
+    if (this.shutdownPromise !== undefined) {
+      return this.shutdownPromise
+    }
+
+    this.shutdownRequested = true
+    const current = retirement(this.options.child, () => {
+      this.requestShutdown()
+    }).then((result) => this.accountForKernelAck(result))
+    this.shutdownPromise = current.then((result) => this.finishShutdown(result))
+    return this.shutdownPromise
+  }
+
+  alive(): boolean {
+    const { child } = this.options
+    return !this.closed && child.exitCode === null && child.signalCode === null
   }
 }
 

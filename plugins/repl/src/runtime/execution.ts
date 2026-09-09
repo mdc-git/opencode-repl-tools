@@ -8,9 +8,9 @@ import type { RuntimeState } from './state.ts'
 import {
   errorMessage,
   finishJob,
-  sameCell,
+  isSameCell,
+  isTerminal,
   startupCleanup,
-  terminal,
   type Cell,
   type Interpreter,
   type Job
@@ -42,11 +42,11 @@ function updateWaitingInput(
   event: Extract<PythonEvent, { type: 'waiting_input' }>
 ): Job | undefined {
   const job = cell.active
-  if (job === undefined || job.id !== event.jobId) {
+  if (job?.id !== event.jobId) {
     return undefined
   }
 
-  if (terminal(job.state)) {
+  if (isTerminal(job.state)) {
     return undefined
   }
 
@@ -65,7 +65,7 @@ function handleInputEvent(
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
     const waiting = yield* state.locked((map) =>
-      Effect.sync(() => (sameCell(map, cell) ? updateWaitingInput(cell, event) : undefined))
+      Effect.sync(() => (isSameCell(map, cell) ? updateWaitingInput(cell, event) : undefined))
     )
     if (waiting !== undefined) {
       yield* notifyInput(state, cell, waiting, waiting.inputSerial)
@@ -135,17 +135,17 @@ function recordStartupFailure(cell: Cell, job: Job, failure: StartupFailure): vo
   finishJob(cell, job, 'failed', { kind: 'startup', message: errorMessage(failure.error) })
 }
 
-function interpreterBlocked(cell: Cell): boolean {
+function isInterpreterBlocked(cell: Cell): boolean {
   return cell.lifecycle === 'retiring' || cell.lifecycle === 'failed'
 }
 
-function acceptInterpreter(
+function canAcceptInterpreter(
   map: Map<string, Cell>,
   cell: Cell,
   job: Job,
   interpreter: Interpreter
 ): boolean {
-  if (!sameCell(map, cell)) {
+  if (!isSameCell(map, cell)) {
     return false
   }
 
@@ -153,7 +153,7 @@ function acceptInterpreter(
     return false
   }
 
-  if (interpreterBlocked(cell)) {
+  if (isInterpreterBlocked(cell)) {
     return false
   }
 
@@ -164,7 +164,7 @@ function acceptInterpreter(
 }
 
 function markExistingRunning(cell: Cell, job: Job): void {
-  if (cell.active !== job || terminal(job.state)) {
+  if (cell.active !== job || isTerminal(job.state)) {
     return
   }
 
@@ -214,7 +214,7 @@ function installInterpreter(
     }
 
     const isAccepted = yield* state.locked((map) =>
-      Effect.sync(() => acceptInterpreter(map, cell, job, started.value))
+      Effect.sync(() => canAcceptInterpreter(map, cell, job, started.value))
     )
     if (!isAccepted) {
       yield* Effect.promise(async () => safeShutdown(started.value).then(() => undefined))
@@ -288,7 +288,7 @@ function completeEvaluation(
     return
   }
 
-  if (terminal(job.state)) {
+  if (isTerminal(job.state)) {
     return
   }
 

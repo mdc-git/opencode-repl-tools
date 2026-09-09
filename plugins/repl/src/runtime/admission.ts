@@ -4,8 +4,8 @@ import type { RuntimeState } from './state.ts'
 import {
   cellKey,
   expected,
+  isTerminal,
   newJob,
-  terminal,
   type Cell,
   type Job,
   type ToolCallContext
@@ -17,7 +17,7 @@ function cleanupError(cell: Cell): string {
 
 function hasActiveJob(cell: Cell): boolean {
   const { active } = cell
-  return active !== undefined && !terminal(active.state)
+  return active !== undefined && !isTerminal(active.state)
 }
 
 function lifecycleError(cell: Cell, language: Language): JobOperationOutput | undefined {
@@ -65,6 +65,10 @@ type CellRequest = {
   readonly directory: string
 }
 
+type AdmissionResult =
+  | { readonly error: JobOperationOutput }
+  | { readonly cell: Cell; readonly job: Job }
+
 function getOrCreateCell(
   state: RuntimeState,
   map: Map<string, Cell>,
@@ -101,26 +105,26 @@ export function admitEvaluation(
   language: Language,
   context: ToolCallContext,
   directory: string
-) {
+): Effect.Effect<AdmissionResult> {
   return state.locked((map) =>
     Effect.gen(function* () {
       if (!state.activationOpen()) {
-        return { error: expected('lifecycle', 'plugin activation is closed') } as const
+        return { error: expected('lifecycle', 'plugin activation is closed') }
       }
 
       const existing = map.get(cellKey(context.sessionID, language))
       const denied = admissionError(existing, language)
       if (denied !== undefined) {
-        return { error: denied } as const
+        return { error: denied }
       }
 
       const cell = yield* getOrCreateCell(state, map, {
-        sessionID: context.sessionID,
+        ['sessionID']: context.sessionID,
         language,
         directory
       })
       yield* ensureCellScope(state, cell)
-      return { cell, job: prepareJob(cell, language) } as const
+      return { cell, job: prepareJob(cell, language) }
     })
   )
 }

@@ -2,14 +2,14 @@ import { Effect } from 'effect'
 import { safeShutdown } from './cleanup.ts'
 import { notifyTerminal } from './notifications.ts'
 import type { RuntimeState } from './state.ts'
-import { finishJob, sameCell, terminal, type Cell, type Interpreter, type Job } from './types.ts'
+import { finishJob, isSameCell, isTerminal, type Cell, type Interpreter, type Job } from './types.ts'
 
 type FatalPreparation = {
   readonly interpreter: Interpreter
   readonly scope: Cell['scope']
 }
 
-function fatalBlocked(cell: Cell): boolean {
+function isFatalBlocked(cell: Cell): boolean {
   return cell.lifecycle === 'retiring' || cell.lifecycle === 'failed'
 }
 
@@ -18,11 +18,11 @@ function prepareFatal(
   message: string,
   map: Map<string, Cell>
 ): FatalPreparation | undefined {
-  if (!sameCell(map, cell)) {
+  if (!isSameCell(map, cell)) {
     return undefined
   }
 
-  if (fatalBlocked(cell)) {
+  if (isFatalBlocked(cell)) {
     return undefined
   }
 
@@ -42,7 +42,7 @@ function failFatalCleanup(cell: Cell, interpreter: Interpreter, message: string)
   cell.cleanupRetry = async () => interpreter.shutdown()
   cell.transcript.append('system', `[cleanup unconfirmed] ${message}\n`)
   const { active } = cell
-  if (active === undefined || terminal(active.state)) {
+  if (active === undefined || isTerminal(active.state)) {
     return undefined
   }
 
@@ -51,7 +51,7 @@ function failFatalCleanup(cell: Cell, interpreter: Interpreter, message: string)
 }
 
 function finishFatalJob(active: Job | undefined, cell: Cell, message: string): Job | undefined {
-  if (active === undefined || terminal(active.state)) {
+  if (active === undefined || isTerminal(active.state)) {
     return undefined
   }
 
