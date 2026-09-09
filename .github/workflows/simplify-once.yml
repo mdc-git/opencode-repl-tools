@@ -1,0 +1,123 @@
+name: Simplify once
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  simplify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - run: bun install
+      - name: Apply removal-biased simplifications
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path):
+              return Path(path).read_text()
+
+          def write(path, text):
+              Path(path).write_text(text)
+
+          write('plugins/repl/src/runtime/admission.ts', '''import { Effect } from 'effect'\nimport type { JobOperationOutput, Language } from '../model.ts'\nimport type { RuntimeState } from './state.ts'\nimport { cellKey, expected, isTerminal, newJob, type Cell, type Job, type ToolCallContext } from './types.ts'\n\ntype AdmissionResult =\n  | { readonly error: JobOperationOutput }\n  | { readonly cell: Cell; readonly job: Job }\n\nfunction admissionError(cell: Cell | undefined, language: Language): JobOperationOutput | undefined {\n  if (cell === undefined) {\n    return undefined\n  }\n\n  if (cell.lifecycle === 'failed') {\n    return expected('lifecycle', cell.cleanupError ?? 'Cell teardown is unconfirmed')\n  }\n\n  if (cell.lifecycle === 'retiring') {\n    return expected('lifecycle', `${language} Cell is retiring its interpreter`)\n  }\n\n  if (cell.active !== undefined && !isTerminal(cell.active.state)) {\n    return expected('busy', `${language} Cell already has an active job`)\n  }\n\n  return undefined\n}\n\nexport function admitEvaluation(\n  state: RuntimeState,\n  language: Language,\n  context: ToolCallContext,\n  directory: string\n): Effect.Effect<AdmissionResult> {\n  return state.locked((map) =>\n    Effect.gen(function* () {\n      if (!state.activationOpen()) {\n        return { error: expected('lifecycle', 'plugin activation is closed') }\n      }\n\n      const key = cellKey(context.sessionID, language)\n      let cell = map.get(key)\n      const denied = admissionError(cell, language)\n      if (denied !== undefined) {\n        return { error: denied }\n      }\n\n      if (cell === undefined) {\n        cell = yield* state.createCell(context.sessionID, language, directory)\n        map.set(key, cell)\n      }\n\n      const job = newJob(cell, language)\n      cell.active = job\n      cell.lifecycle = cell.interpreter === undefined ? 'starting' : 'live'\n      return { cell, job }\n    })\n  )\n}\n''')
+
+          write('plugins/repl/src/runtime/state.ts', '''import type { Plugin } from '@opencode/plugin/effect'\nimport { Effect, Exit, Scope, SynchronizedRef } from 'effect'\nimport { PythonAdapter } from '../adapters/python.ts'\nimport type { Language } from '../model.ts'\nimport { OutputRing } from '../output-ring.ts'\nimport { TRANSCRIPT_BYTES, cellKey, errorMessage, isSameCell, type Cell, type SessionId } from './types.ts'\n\nexport class RuntimeState {\n  readonly python: PythonAdapter\n\n  constructor(\n    readonly ctx: Plugin.Context,\n    readonly nodeCommand: string,\n    pythonCommand: string,\n    readonly activationScope: Scope.Closeable,\n    private readonly cells: SynchronizedRef.SynchronizedRef<Map<string, Cell>>\n  ) {\n    this.python = new PythonAdapter(pythonCommand)\n  }\n\n  private validateLocation(session: {\n    readonly location: { readonly directory: string; readonly workspaceID?: string }\n  }) {\n    if (session.location.directory !== this.ctx.location.directory) {\n      return {\n        ok: false as const,\n        error: { kind: 'lifecycle' as const, message: 'session moved away from this plugin location' }\n      }\n    }\n\n    const expectedWorkspace = this.ctx.location.workspaceID\n    const actualWorkspace = session.location.workspaceID\n    if (expectedWorkspace !== undefined && actualWorkspace !== undefined && expectedWorkspace !== actualWorkspace) {\n      return {\n        ok: false as const,\n        error: {\n          kind: 'lifecycle' as const,\n          message: 'session workspace no longer matches this plugin location'\n        }\n      }\n    }\n\n    return { ok: true as const, session }\n  }\n\n  private installReplacement(\n    map: Map<string, Cell>,\n    cell: Cell,\n    replacement: Scope.Closeable | undefined\n  ): boolean {\n    if (!isSameCell(map, cell) || cell.lifecycle === 'failed') {\n      return false\n    }\n\n    if (replacement !== undefined) {\n      cell.scope = replacement\n    }\n\n    cell.lifecycle = cell.interpreter === undefined ? 'healthy' : 'live'\n    return replacement !== undefined\n  }\n\n  locked<A>(operation: (map: Map<string, Cell>) => Effect.Effect<A>): Effect.Effect<A> {\n    return SynchronizedRef.modifyEffect(this.cells, (map) =>\n      operation(map).pipe(Effect.map((result) => [result, map] as const))\n    )\n  }\n\n  activationOpen(): boolean {\n    return this.activationScope.state._tag !== 'Closed'\n  }\n\n  dispatch(effect: Effect.Effect<void>): void {\n    if (this.activationOpen()) {\n      Effect.runFork(effect.pipe(Effect.forkIn(this.activationScope), Effect.asVoid))\n    }\n  }\n\n  validateSession(sessionID: SessionId) {\n    if (!this.activationOpen()) {\n      return Effect.succeed({\n        ok: false as const,\n        error: { kind: 'lifecycle' as const, message: 'plugin activation is closed' }\n      })\n    }\n\n    return this.ctx.session.get({ ['sessionID']: sessionID }).pipe(\n      Effect.map((session) => this.validateLocation(session)),\n      Effect.catch((error) =>\n        Effect.succeed({\n          ok: false as const,\n          error: {\n            kind: 'lifecycle' as const,\n            message: `OpenCode session lookup failed: ${errorMessage(error)}`\n          }\n        })\n      )\n    )\n  }\n\n  createCell(sessionID: SessionId, language: Language, directory: string): Effect.Effect<Cell> {\n    return Scope.fork(this.activationScope).pipe(\n      Effect.map((scope) => ({\n        ['sessionID']: sessionID,\n        language,\n        directory,\n        transcript: new OutputRing(TRANSCRIPT_BYTES),\n        history: [],\n        scope,\n        lifecycle: 'healthy' as const,\n        notificationsSuppressed: false\n      }))\n    )\n  }\n\n  replaceCellScope(cell: Cell, oldScope: Scope.Closeable): Effect.Effect<void> {\n    const replacementEffect: Effect.Effect<Scope.Closeable | undefined> = this.activationOpen()\n      ? Scope.fork(this.activationScope)\n      : Effect.succeed(undefined)\n\n    return replacementEffect.pipe(\n      Effect.flatMap((replacement) =>\n        this.locked((map) =>\n          Effect.sync(() => this.installReplacement(map, cell, replacement))\n        ).pipe(\n          Effect.flatMap((isUsed) => {\n            const closeReplacement =\n              replacement !== undefined && !isUsed\n                ? Scope.close(replacement, Exit.void)\n                : Effect.void\n            return closeReplacement.pipe(Effect.andThen(Scope.close(oldScope, Exit.void)))\n          })\n        )\n      )\n    )\n  }\n}\n\nexport function makeState(\n  ctx: Plugin.Context,\n  nodeCommand: string,\n  pythonCommand: string\n): Effect.Effect<RuntimeState, never, Scope.Scope> {\n  return Effect.gen(function* () {\n    const parentScope = yield* Scope.Scope\n    const activationScope = yield* Scope.fork(parentScope)\n    const cells = yield* SynchronizedRef.make(new Map<string, Cell>())\n    return new RuntimeState(ctx, nodeCommand, pythonCommand, activationScope, cells)\n  })\n}\n''')
+
+          write('plugins/repl/src/runtime/cleanup.ts', '''import type { CleanupResult } from '../adapters/process-group.ts'\nimport { errorMessage } from './types.ts'\n\nexport async function safeCleanup(action: () => Promise<CleanupResult>): Promise<CleanupResult> {\n  try {\n    return await action()\n  } catch (error) {\n    return { confirmed: false, message: errorMessage(error) }\n  }\n}\n''')
+
+          path = 'plugins/repl/src/runtime/types.ts'
+          text = read(path).replace("export const SESSION_ID_KEY = 'sessionID' as const\n", '')
+          start = text.index('function asStartupError(')
+          text = text[:start] + '''export function startupCleanup(error: unknown): {\n  readonly unconfirmed: boolean\n  readonly retry?: CleanupRetry\n} {\n  const startupError =\n    error instanceof NodeStartupError || error instanceof PythonStartupError ? error : undefined\n  if (startupError?.retryCleanup === undefined) {\n    return { unconfirmed: false }\n  }\n\n  return { unconfirmed: true, retry: startupError.retryCleanup }\n}\n'''
+          write(path, text)
+
+          path = 'plugins/repl/src/adapters/node/types.ts'
+          text = read(path).replace(
+              '    readonly isCleanupConfirmed: boolean,\n    readonly retryCleanup?: () => Promise<CleanupResult>\n',
+              '    readonly retryCleanup?: () => Promise<CleanupResult>\n'
+          )
+          write(path, text)
+
+          path = 'plugins/repl/src/adapters/python/types.ts'
+          text = read(path).replace(
+              '    readonly diagnosticTail?: string,\n    readonly isCleanupConfirmed?: boolean,\n    readonly retryCleanup?: () => Promise<CleanupResult>\n',
+              '    readonly diagnosticTail?: string,\n    readonly retryCleanup?: () => Promise<CleanupResult>\n'
+          )
+          write(path, text)
+
+          path = 'plugins/repl/src/adapters/node.ts'
+          text = read(path).replace('new NodeStartupError(message, false, async () => retirement(child))', 'new NodeStartupError(message, async () => retirement(child))')
+          text = text.replace('new NodeStartupError(message, false, async () => connection.shutdown())', 'new NodeStartupError(message, async () => connection.shutdown())')
+          write(path, text)
+
+          path = 'plugins/repl/src/adapters/python.ts'
+          text = read(path)
+          text = text.replace("import { PythonEnvironment, isSupportedPython, parsePythonVersion } from './python/environment.ts'", "import { PythonEnvironment } from './python/environment.ts'")
+          begin = text.index('function assertSupportedVersion(')
+          end = text.index('async function failReady(', begin)
+          text = text[:begin] + text[end:]
+          text = text.replace('    const versionText = await connection.waitUntilReady(signal)\n    assertSupportedVersion(versionText)\n', '    await connection.waitUntilReady(signal)\n')
+          text = text.replace('new PythonStartupError(message, tail, false, async () => connection.shutdown())', 'new PythonStartupError(message, tail, async () => connection.shutdown())')
+          write(path, text)
+
+          replacements = {
+              'plugins/repl/src/runtime/execution.ts': [
+                  ("import { safeShutdown } from './cleanup.ts'", "import { safeCleanup } from './cleanup.ts'"),
+                  ('safeShutdown(started.value)', 'safeCleanup(() => started.value.shutdown())')
+              ],
+              'plugins/repl/src/runtime/fatal.ts': [
+                  ("import { safeShutdown } from './cleanup.ts'", "import { safeCleanup } from './cleanup.ts'"),
+                  ('safeShutdown(prepared.interpreter)', 'safeCleanup(() => prepared.interpreter.shutdown())')
+              ],
+              'plugins/repl/src/runtime/lifecycle.ts': [
+                  ("import { safeRetry, safeShutdown } from './cleanup.ts'", "import { safeCleanup } from './cleanup.ts'"),
+                  ('safeShutdown(interpreter)', 'safeCleanup(() => interpreter.shutdown())'),
+                  ('safeRetry(retry)', 'safeCleanup(retry)')
+              ],
+              'plugins/repl/src/runtime/invalidation.ts': [
+                  ("import { safeRetry, safeShutdown } from './cleanup.ts'", "import { safeCleanup } from './cleanup.ts'"),
+                  ("import { SESSION_ID_KEY, isTerminal, type Cell } from './types.ts'", "import { isTerminal, type Cell } from './types.ts'"),
+                  ('safeShutdown(interpreter)', 'safeCleanup(() => interpreter.shutdown())'),
+                  ('safeRetry(cleanupRetry)', 'safeCleanup(cleanupRetry)'),
+                  ('[SESSION_ID_KEY]: cell.sessionID', "['sessionID']: cell.sessionID")
+              ],
+              'plugins/repl/src/runtime/notifications.ts': [
+                  ('  SESSION_ID_KEY,\n', ''),
+                  ('[SESSION_ID_KEY]: cell.sessionID', "['sessionID']: cell.sessionID")
+              ],
+              'plugins/repl/src/runtime/operations.ts': [
+                  ('Effect.sync(() => state.getCell(map, context.sessionID, language))', 'Effect.sync(() => map.get(cellKey(context.sessionID, language)))')
+              ]
+          }
+          for path, changes in replacements.items():
+              text = read(path)
+              for old, new in changes:
+                  if old not in text:
+                      raise SystemExit(f'missing expected text in {path}: {old}')
+                  text = text.replace(old, new)
+              write(path, text)
+          PY
+
+      - run: bun run format
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run check:workers
+      - run: bun run check:deps
+      - run: bun run check:knip
+      - run: bun run audit
+      - run: bun pm pack
+      - name: Commit simplification
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "refactor: simplify runtime orchestration"
+          git push
