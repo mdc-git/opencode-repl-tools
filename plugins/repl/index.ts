@@ -1,8 +1,15 @@
 import process from 'node:process'
 import { Plugin } from '@opencode/plugin/effect'
 import { Effect, Stream } from 'effect'
-import { EvalInput, JobInput, JobOperationOutput, ResetInput, ResetOutput } from './src/model.ts'
+import {
+  evalInputSchema,
+  jobInputSchema,
+  jobOperationOutputSchema,
+  resetInputSchema,
+  resetOutputSchema
+} from './src/model.ts'
 import { makeRuntime, type ReplRuntime } from './src/runtime.ts'
+import type { SessionID } from './src/runtime/types.ts'
 
 const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
 
@@ -14,8 +21,8 @@ function addTools(
     name: 'repl_node',
     description:
       'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls.',
-    input: EvalInput,
-    output: JobOperationOutput,
+    input: evalInputSchema,
+    output: jobOperationOutputSchema,
     execute: ({ code }, context) =>
       runtime.evaluate('node', code, context).pipe(Effect.map((output) => ({ output })))
   })
@@ -23,8 +30,8 @@ function addTools(
     name: 'repl_python',
     description:
       'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls.',
-    input: EvalInput,
-    output: JobOperationOutput,
+    input: evalInputSchema,
+    output: jobOperationOutputSchema,
     execute: ({ code }, context) =>
       runtime.evaluate('python', code, context).pipe(Effect.map((output) => ({ output })))
   })
@@ -32,8 +39,8 @@ function addTools(
     name: 'repl_job',
     description:
       'Continue a persistent REPL job: read incremental output/status, cancel it, or provide stdin when Python is waiting for input.',
-    input: JobInput,
-    output: JobOperationOutput,
+    input: jobInputSchema,
+    output: jobOperationOutputSchema,
     execute: (input, context) =>
       runtime.job(input, context).pipe(Effect.map((output) => ({ output })))
   })
@@ -41,8 +48,8 @@ function addTools(
     name: 'repl_reset',
     description:
       'Reset a persistent REPL Cell only when you need a clean interpreter; normal scripting and prototyping should reuse the existing Cell.',
-    input: ResetInput,
-    output: ResetOutput,
+    input: resetInputSchema,
+    output: resetOutputSchema,
     execute: ({ language }, context) =>
       runtime.reset(language, context).pipe(Effect.map((output) => ({ output })))
   })
@@ -60,7 +67,7 @@ function invalidationEffect(
     return Effect.void
   }
 
-  return runtime.invalidateSession(event.sessionID)
+  return runtime.invalidateSession(event.sessionID as SessionID)
 }
 
 const replPlugin = Plugin.define({

@@ -1,9 +1,9 @@
 import { Schema } from 'effect'
 
-export const Language = Schema.Literals(['node', 'python'])
-export type Language = typeof Language.Type
+const languageSchema = Schema.Literals(['node', 'python'])
+export type Language = typeof languageSchema.Type
 
-export const JobState = Schema.Literals([
+const jobStateSchema = Schema.Literals([
   'starting',
   'running',
   'waiting_input',
@@ -11,12 +11,12 @@ export const JobState = Schema.Literals([
   'failed',
   'cancelled'
 ])
-export type JobState = typeof JobState.Type
+export type JobState = typeof jobStateSchema.Type
 
-export const OutputStream = Schema.Literals(['stdout', 'stderr', 'display', 'system'])
-export type OutputStream = typeof OutputStream.Type
+const outputStreamSchema = Schema.Literals(['stdout', 'stderr', 'display', 'system'])
+export type OutputStream = typeof outputStreamSchema.Type
 
-export const ErrorKind = Schema.Literals([
+const errorKindSchema = Schema.Literals([
   'busy',
   'not_found',
   'invalid_state',
@@ -24,73 +24,73 @@ export const ErrorKind = Schema.Literals([
   'runtime',
   'lifecycle'
 ])
-export type ErrorKind = typeof ErrorKind.Type
+export type ErrorKind = typeof errorKindSchema.Type
 
-export const OutputChunk = Schema.Struct({
+const outputChunkSchema = Schema.Struct({
   cursor: Schema.Number,
-  stream: OutputStream,
+  stream: outputStreamSchema,
   text: Schema.String,
   jobId: Schema.optionalKey(Schema.String)
 })
-export type OutputChunk = typeof OutputChunk.Type
+export type OutputChunk = typeof outputChunkSchema.Type
 
-export const ReplError = Schema.Struct({
-  kind: ErrorKind,
+const replErrorSchema = Schema.Struct({
+  kind: errorKindSchema,
   message: Schema.String
 })
-export type ReplError = typeof ReplError.Type
+export type ReplError = typeof replErrorSchema.Type
 
-export const EvalInput = Schema.Struct({ code: Schema.String })
-export type EvalInput = typeof EvalInput.Type
+export const evalInputSchema = Schema.Struct({ code: Schema.String })
 
-export const JobStatusInput = Schema.Struct({
+const jobStatusInputSchema = Schema.Struct({
   action: Schema.Literal('status'),
   id: Schema.String,
   cursor: Schema.optionalKey(Schema.Number)
 })
-export const JobCancelInput = Schema.Struct({
+const jobCancelInputSchema = Schema.Struct({
   action: Schema.Literal('cancel'),
   id: Schema.String
 })
-export const JobStdinInput = Schema.Struct({
+const jobStdinInputSchema = Schema.Struct({
   action: Schema.Literal('stdin'),
   id: Schema.String,
   data: Schema.String
 })
-export const JobInput = Schema.Union([JobStatusInput, JobCancelInput, JobStdinInput])
-export type JobInput = typeof JobInput.Type
+export const jobInputSchema = Schema.Union([
+  jobStatusInputSchema,
+  jobCancelInputSchema,
+  jobStdinInputSchema
+])
+export type JobInput = typeof jobInputSchema.Type
 
-export const ResetInput = Schema.Struct({ language: Language })
-export type ResetInput = typeof ResetInput.Type
+export const resetInputSchema = Schema.Struct({ language: languageSchema })
 
-export const JobStatus = Schema.Struct({
+const jobStatusSchema = Schema.Struct({
   ok: Schema.Literal(true),
   id: Schema.String,
-  language: Language,
-  state: JobState,
+  language: languageSchema,
+  state: jobStateSchema,
   cursor: Schema.Number,
   truncated: Schema.Boolean,
-  chunks: Schema.Array(OutputChunk),
+  chunks: Schema.Array(outputChunkSchema),
   prompt: Schema.optionalKey(Schema.String),
   password: Schema.optionalKey(Schema.Boolean),
-  error: Schema.optionalKey(ReplError)
+  error: Schema.optionalKey(replErrorSchema)
 })
-export type JobStatus = typeof JobStatus.Type
+export type JobStatus = typeof jobStatusSchema.Type
 
-export const ExpectedError = Schema.Struct({
+const expectedErrorSchema = Schema.Struct({
   ok: Schema.Literal(false),
-  error: ReplError
+  error: replErrorSchema
 })
-export type ExpectedError = typeof ExpectedError.Type
 
-export const JobOperationOutput = Schema.Union([JobStatus, ExpectedError])
-export type JobOperationOutput = typeof JobOperationOutput.Type
+export const jobOperationOutputSchema = Schema.Union([jobStatusSchema, expectedErrorSchema])
+export type JobOperationOutput = typeof jobOperationOutputSchema.Type
 
-export const ResetSuccess = Schema.Struct({
+const resetSuccessSchema = Schema.Struct({
   ok: Schema.Literal(true),
-  language: Language
+  language: languageSchema
 })
-export type ResetSuccess = typeof ResetSuccess.Type
 
-export const ResetOutput = Schema.Union([ResetSuccess, ExpectedError])
-export type ResetOutput = typeof ResetOutput.Type
+export const resetOutputSchema = Schema.Union([resetSuccessSchema, expectedErrorSchema])
+export type ResetOutput = typeof resetOutputSchema.Type

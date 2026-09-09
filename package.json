@@ -1,5 +1,6 @@
 {
   "name": "opencode-repl-tools",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": "./plugins/repl/index.ts",
