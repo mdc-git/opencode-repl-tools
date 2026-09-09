@@ -197,13 +197,13 @@ export function newJob(cell: Cell, language: Language): Job {
   }
 }
 
-function asStartupError(error: unknown): NodeStartupError | PythonStartupError | undefined {
+function cleanupRetry(error: unknown): CleanupRetry | undefined {
   if (error instanceof NodeStartupError) {
-    return error
+    return error.retryCleanup
   }
 
   if (error instanceof PythonStartupError) {
-    return error
+    return error.retryCleanup
   }
 
   return undefined
@@ -213,14 +213,6 @@ export function startupCleanup(error: unknown): {
   readonly unconfirmed: boolean
   readonly retry?: CleanupRetry
 } {
-  const startupError = asStartupError(error)
-  if (startupError === undefined) {
-    return { unconfirmed: false }
-  }
-
-  if (startupError.isCleanupConfirmed !== false) {
-    return { unconfirmed: false }
-  }
-
-  return { unconfirmed: true, retry: startupError.retryCleanup }
+  const retry = cleanupRetry(error)
+  return retry === undefined ? { unconfirmed: false } : { unconfirmed: true, retry }
 }
