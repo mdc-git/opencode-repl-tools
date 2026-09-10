@@ -17,11 +17,9 @@ if ! ss -ltn | grep -q ":$PORT "; then
   exit 1
 fi
 
-runuser -u codespace --preserve-environment -- \
-  gh codespace ports visibility "$PORT:public" -c "$CODESPACE" >>"$LOG" 2>&1
+gh codespace ports visibility "$PORT:public" -c "$CODESPACE" >>"$LOG" 2>&1
 
-visibility=$(runuser -u codespace --preserve-environment -- \
-  gh codespace ports -c "$CODESPACE" --json sourcePort,visibility \
+visibility=$(gh codespace ports -c "$CODESPACE" --json sourcePort,visibility \
   --jq ".[] | select(.sourcePort == $PORT) | .visibility")
 
 if [[ "$visibility" != public ]]; then
