@@ -13,7 +13,7 @@ import type { SessionId } from './src/runtime/types.ts'
 
 const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
 
-function sourceText(code: string | ReadonlyArray<string>): string {
+function sourceText(code: string | readonly string[]): string {
   return typeof code === 'string' ? code : code.join('\n')
 }
 
@@ -37,7 +37,9 @@ function addTools(
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     execute: ({ code }, context) =>
-      runtime.evaluate('python', sourceText(code), context).pipe(Effect.map((output) => ({ output })))
+      runtime
+        .evaluate('python', sourceText(code), context)
+        .pipe(Effect.map((output) => ({ output })))
   })
   editor.add({
     name: 'repl_job',
