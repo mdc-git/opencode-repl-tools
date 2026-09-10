@@ -11,7 +11,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl python3 python3-venv util-linux
+    apt-get install -y --no-install-recommends ca-certificates curl python3 python3-venv tmux util-linux
 RUN set -eux; \
     groupadd --gid 1001 opencode-demo; \
     useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash opencode-demo; \
@@ -78,6 +78,7 @@ RUN set -eux; \
     chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
     test -x /usr/local/bin/ttyd; \
     test -x /usr/local/bin/gh; \
+    test -x /usr/bin/tmux; \
     test -x /opt/opencode/bin/opencode2; \
     test -x /usr/local/bin/run-demo-container; \
     test -x /usr/local/bin/run-demo-session; \
