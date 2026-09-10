@@ -46,6 +46,20 @@ Bootstrap work is created under the operating system temporary directory rather 
 { "code": "globalThis.count = (globalThis.count ?? 0) + 1; count" }
 ```
 
+For multiline or template-heavy source, `code` can instead be an array of source lines. The plugin joins the lines with newline characters before evaluation:
+
+```json
+{
+  "code": [
+    "const name = 'world'",
+    "const message = `hello ${name}`",
+    "message"
+  ]
+}
+```
+
+The array form is preferable when calling the tool from restricted orchestration because it avoids nested template literals and tagged-template workarounds such as `String.raw`.
+
 Evaluates JavaScript or TypeScript in the current OpenCode session's persistent Node Cell. The plugin transpiles each snippet with `typescript.transpileModule` before evaluation, so annotations, interfaces, generics, enums, classes, and parameter properties are accepted while declarations and runtime state persist between calls.
 
 This is transpilation only. Semantic TypeScript type checking is not performed. `require` resolves from the session's location directory. Raw process stdout and stderr are recorded as ambient Cell output, while structured REPL results and evaluation errors are attributed to the job.
@@ -54,6 +68,17 @@ This is transpilation only. Semantic TypeScript type checking is not performed. 
 
 ```json
 { "code": "counter = globals().get('counter', 0) + 1\ncounter" }
+```
+
+Python source also accepts the same line-array form:
+
+```json
+{
+  "code": [
+    "counter = globals().get('counter', 0) + 1",
+    "counter"
+  ]
+}
 ```
 
 Evaluates code in the current OpenCode session's persistent Jupyter-backed Python Cell. Jupyter parent message IDs are used for output attribution. Text display output is retained; binary rich media is not serialized.
