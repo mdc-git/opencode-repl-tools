@@ -2,6 +2,7 @@
   "name": "opencode-repl-tools",
   "version": "0.0.0",
   "private": true,
+  "repository": "github:mdc-git/opencode-repl-tools",
   "type": "module",
   "exports": "./plugins/repl/index.ts",
   "sideEffects": false,
