@@ -27,6 +27,7 @@ function addTools(
       'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline or template-heavy source so orchestration code does not need nested backticks or String.raw tagged templates.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
+    options: { codemode: false },
     execute: ({ code }, context) =>
       runtime.evaluate('node', sourceText(code), context).pipe(Effect.map((output) => ({ output })))
   })
@@ -36,6 +37,7 @@ function addTools(
       'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline source so orchestration code avoids fragile nested string escaping.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
+    options: { codemode: false },
     execute: ({ code }, context) =>
       runtime
         .evaluate('python', sourceText(code), context)
@@ -47,6 +49,7 @@ function addTools(
       'Continue a persistent REPL job: read incremental output/status, cancel it, or provide stdin when Python is waiting for input.',
     input: jobInputSchema,
     output: jobOperationOutputSchema,
+    options: { codemode: false },
     execute: (input, context) =>
       runtime.job(input, context).pipe(Effect.map((output) => ({ output })))
   })
@@ -56,6 +59,7 @@ function addTools(
       'Reset a persistent REPL Cell only when you need a clean interpreter; normal scripting and prototyping should reuse the existing Cell.',
     input: resetInputSchema,
     output: resetOutputSchema,
+    options: { codemode: false },
     execute: ({ language }, context) =>
       runtime.reset(language, context).pipe(Effect.map((output) => ({ output })))
   })
