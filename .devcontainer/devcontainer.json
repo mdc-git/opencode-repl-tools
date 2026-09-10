@@ -1,5 +1,6 @@
 {
   "name": "OpenCode REPL Tools Demo",
+  "remoteUser": "root",
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
