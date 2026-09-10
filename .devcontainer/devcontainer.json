@@ -8,7 +8,7 @@
     "7681": {
       "label": "OpenCode TUI",
       "protocol": "http",
-      "onAutoForward": "silent"
+      "onAutoForward": "openBrowserOnce"
     }
   },
   "postAttachCommand": "/usr/local/bin/publish-demo"
