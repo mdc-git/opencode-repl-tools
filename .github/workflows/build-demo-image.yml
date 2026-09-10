@@ -39,3 +39,30 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+      - name: Smoke test browser terminal image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+          docker pull "$image"
+          docker run --detach --name opencode-repl-tools-demo-smoke \
+            --env RepositoryName=opencode-repl-tools \
+            --publish 127.0.0.1:7681:7681 \
+            --volume "$PWD:/workspaces/opencode-repl-tools:ro" \
+            "$image"
+          trap 'docker logs opencode-repl-tools-demo-smoke || true; docker rm --force opencode-repl-tools-demo-smoke >/dev/null 2>&1 || true' EXIT
+
+          for _ in $(seq 1 100); do
+            if curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null; then
+              exit 0
+            fi
+            if ! docker inspect --format '{{.State.Running}}' opencode-repl-tools-demo-smoke | grep -qx true; then
+              echo 'demo container exited before ttyd became ready' >&2
+              exit 1
+            fi
+            sleep 0.1
+          done
+
+          echo 'ttyd did not become ready within 10 seconds' >&2
+          exit 1
