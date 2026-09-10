@@ -12,7 +12,7 @@ The `demo` branch launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`.
 
 The browser TUI runs as the dedicated `opencode-demo` Unix user. The container first snapshots the repository into a root-owned read-only source tree, then removes access by the demo identity to the real `/workspaces` checkout. Root lifecycle commands execute image-owned scripts rather than files from the mutable checkout.
 
-Each browser connection receives a fresh OpenCode HOME and writable workspace copied from the immutable source snapshot. The prior connection's OpenCode state, provider auth files, logs, and workspace mutations are removed before the next connection starts. Shared OpenCode binaries, Node dependencies, and the prewarmed Python environment are root-owned and read-only. `ttyd` accepts one client at a time and checks the WebSocket origin.
+Up to four browser tabs or windows can attach to the same active OpenCode TUI through a shared `tmux` session. When the last browser disconnects, `ttyd` exits, the shared OpenCode process is retired, and the disposable OpenCode HOME and writable workspace are removed before the next connection cohort starts. Shared OpenCode binaries, Node dependencies, and the prewarmed Python environment are root-owned and read-only.
 
 OpenCode and the REPL workers start from a minimal explicit environment and do not inherit the normal Codespaces environment, including `GITHUB_TOKEN` or Codespaces secrets.
 
@@ -22,7 +22,7 @@ After the Codespace starts, the image-owned publisher waits for `ttyd`, makes fo
 https://<codespace-name>-7681.app.github.dev/
 ```
 
-Public-port availability depends on the repository or organization Codespaces policy. The public terminal intentionally permits arbitrary code execution as `opencode-demo`; anyone who can reach the URL controls the active demo session. Do not enter a valuable provider credential into a public demo session. A credential connected during the active session is readable by code running as the same Unix identity even though it is removed before the next browser session starts.
+Public-port availability depends on the repository or organization Codespaces policy. The public terminal intentionally permits arbitrary code execution as `opencode-demo`; anyone who can reach the URL controls the active demo session. Do not enter a valuable provider credential into a public demo session. A credential connected during the active session is readable by code running as the same Unix identity even though it is removed before the next browser cohort starts.
 
 Connect an LLM provider from the TUI with `/connect`, then ask OpenCode to use `repl_node` or `repl_python`.
 
