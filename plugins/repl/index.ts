@@ -13,6 +13,10 @@ import type { SessionId } from './src/runtime/types.ts'
 
 const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
 
+function sourceText(code: string | ReadonlyArray<string>): string {
+  return typeof code === 'string' ? code : code.join('\n')
+}
+
 function addTools(
   editor: Parameters<Parameters<Plugin.Context['tool']['transform']>[0]>[0],
   runtime: ReplRuntime
@@ -20,20 +24,20 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls.',
+      'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline or template-heavy source so orchestration code does not need nested backticks or String.raw tagged templates.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     execute: ({ code }, context) =>
-      runtime.evaluate('node', code, context).pipe(Effect.map((output) => ({ output })))
+      runtime.evaluate('node', sourceText(code), context).pipe(Effect.map((output) => ({ output })))
   })
   editor.add({
     name: 'repl_python',
     description:
-      'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls.',
+      'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline source so orchestration code avoids fragile nested string escaping.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     execute: ({ code }, context) =>
-      runtime.evaluate('python', code, context).pipe(Effect.map((output) => ({ output })))
+      runtime.evaluate('python', sourceText(code), context).pipe(Effect.map((output) => ({ output })))
   })
   editor.add({
     name: 'repl_job',
