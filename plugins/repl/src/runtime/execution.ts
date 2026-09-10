@@ -9,6 +9,7 @@ import {
   errorMessage,
   finishJob,
   isSameCell,
+  isTerminal,
   startupCleanup,
   type Cell,
   type Interpreter,
