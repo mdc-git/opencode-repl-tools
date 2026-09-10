@@ -11,5 +11,5 @@
       "onAutoForward": "silent"
     }
   },
-  "postAttachCommand": "bash .devcontainer/publish-demo.sh"
+  "postAttachCommand": "/usr/local/bin/publish-demo"
 }
