@@ -3,7 +3,7 @@ set -euo pipefail
 
 DEMO_USER=opencode-demo
 DEMO_HOME=/home/$DEMO_USER
-DEMO_ROOT=$DEMO_HOME/workspace
+DEMO_SOURCE=/opt/opencode-demo/source
 SOURCE=${OPENCODE_DEMO_SOURCE:-/workspaces/${RepositoryName:-opencode-repl-tools}}
 LOG=/root/.cache/opencode-repl-tools-preview.log
 PORT=7681
@@ -23,26 +23,35 @@ if [[ ! -f "$SOURCE/package.json" || ! -d "$SOURCE/plugins/repl" ]]; then
   exit 1
 fi
 
-rm -rf "$DEMO_ROOT"
-install -d -m 0755 -o "$DEMO_USER" -g "$DEMO_USER" "$DEMO_ROOT"
-cp -a "$SOURCE/." "$DEMO_ROOT/"
-rm -rf "$DEMO_ROOT/.git" "$DEMO_ROOT/node_modules"
-ln -s /opt/opencode-repl-tools/node_modules "$DEMO_ROOT/node_modules"
-chown -R "$DEMO_USER:$DEMO_USER" "$DEMO_ROOT"
+rm -rf "$DEMO_SOURCE"
+install -d -m 0755 -o root -g root "$DEMO_SOURCE"
+cp -a "$SOURCE/." "$DEMO_SOURCE/"
+rm -rf "$DEMO_SOURCE/.git" "$DEMO_SOURCE/node_modules"
+chown -R root:root "$DEMO_SOURCE"
+chmod -R a-w "$DEMO_SOURCE"
+chmod -R a+rX "$DEMO_SOURCE"
 
-exec runuser -u "$DEMO_USER" -- env -i \
-  HOME="$DEMO_HOME" \
-  USER="$DEMO_USER" \
-  LOGNAME="$DEMO_USER" \
-  SHELL=/bin/bash \
-  LANG=C.UTF-8 \
-  PATH=/usr/local/bin:/usr/bin:/bin \
-  OPENCODE_REPL_NODE=/usr/local/bin/node \
-  OPENCODE_REPL_PYTHON=/usr/bin/python3 \
-  /usr/local/bin/ttyd \
-    --writable \
-    --interface 0.0.0.0 \
-    --port "$PORT" \
-    --cwd "$DEMO_ROOT" \
-    "$DEMO_HOME/.opencode/bin/opencode2" --standalone "$DEMO_ROOT" \
-    >>"$LOG" 2>&1
+# The public demo must never be able to alter the real Codespaces checkout.
+# The remote Codespaces user is root, so the editor and lifecycle machinery
+# retain access while the unprivileged demo identity cannot traverse it.
+chmod 0700 "$SOURCE"
+
+while true; do
+  runuser -u "$DEMO_USER" -- env -i \
+    HOME="$DEMO_HOME" \
+    USER="$DEMO_USER" \
+    LOGNAME="$DEMO_USER" \
+    SHELL=/bin/bash \
+    LANG=C.UTF-8 \
+    PATH=/usr/local/bin:/usr/bin:/bin \
+    /usr/local/bin/ttyd \
+      --writable \
+      --check-origin \
+      --max-clients 1 \
+      --interface 0.0.0.0 \
+      --port "$PORT" \
+      /usr/local/bin/run-demo-session \
+      >>"$LOG" 2>&1 || true
+  echo "ttyd exited; restarting" >>"$LOG"
+  sleep 1
+done
