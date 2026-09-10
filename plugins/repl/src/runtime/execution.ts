@@ -44,7 +44,9 @@ function onNodeEvent(state: RuntimeState, cell: Cell, event: NodeEvent): void {
       return
     }
 
-    state.dispatch(handleFatal(state, cell, `Node REPL emitted image for unexpected job ${event.jobId}`))
+    state.dispatch(
+      handleFatal(state, cell, `Node REPL emitted image for unexpected job ${event.jobId}`)
+    )
     return
   }
 

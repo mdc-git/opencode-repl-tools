@@ -37,7 +37,8 @@ function addTools(
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
-    execute: ({ code }, context) => runtime.evaluate('node', code, context).pipe(Effect.map(toolResult))
+    execute: ({ code }, context) =>
+      runtime.evaluate('node', code, context).pipe(Effect.map(toolResult))
   })
   editor.add({
     name: 'repl_python',

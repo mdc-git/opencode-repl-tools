@@ -34,7 +34,7 @@ function operationResult(output: JobOperationOutput, job?: Job): ReplOperationRe
     return { output, images: [] }
   }
 
-  return { output, images: job.images.splice(0, job.images.length) }
+  return { output, images: job.images.splice(0) }
 }
 
 async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal: AbortSignal) {
@@ -225,10 +225,7 @@ function stdinOperation(
   })
 }
 
-function cancelOperation(
-  state: RuntimeState,
-  found: FoundJob
-): Effect.Effect<ReplOperationResult> {
+function cancelOperation(state: RuntimeState, found: FoundJob): Effect.Effect<ReplOperationResult> {
   if (isTerminal(found.job.state)) {
     return Effect.succeed(
       operationResult(snapshot(found.cell, found.job, found.job.startCursor, true), found.job)
@@ -237,7 +234,9 @@ function cancelOperation(
 
   if (found.cell.lifecycle === 'failed') {
     return Effect.succeed(
-      operationResult(expected('lifecycle', found.cell.cleanupError ?? 'Cell teardown is unconfirmed'))
+      operationResult(
+        expected('lifecycle', found.cell.cleanupError ?? 'Cell teardown is unconfirmed')
+      )
     )
   }
 
@@ -274,7 +273,9 @@ function jobOperation(state: RuntimeState): ReplRuntime['job'] {
         Effect.sync(() => findSessionJob(map, context.sessionID, input.id))
       )
       if (found === undefined) {
-        return operationResult(expected('not_found', `job ${input.id} was not found in this OpenCode session`))
+        return operationResult(
+          expected('not_found', `job ${input.id} was not found in this OpenCode session`)
+        )
       }
 
       return yield* operateFound(state, found, input)
