@@ -5,6 +5,7 @@ on:
     branches: [demo]
     paths:
       - .devcontainer/Dockerfile
+      - .devcontainer/run-demo-container.sh
       - package.json
       - plugins/repl/requirements.txt
       - .github/workflows/build-demo-image.yml
