@@ -2,13 +2,14 @@
   "name": "OpenCode REPL Tools Demo",
   "image": "ghcr.io/mdc-git/opencode-repl-tools-demo:demo",
   "remoteUser": "root",
+  "overrideCommand": false,
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
       "label": "OpenCode TUI",
+      "protocol": "http",
       "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "bash .devcontainer/start-demo.sh",
   "postAttachCommand": "bash .devcontainer/publish-demo.sh"
 }
