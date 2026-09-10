@@ -15,6 +15,7 @@ import {
   isTerminal,
   type Cell,
   type Job,
+  type ReplOperationResult,
   type ReplRuntime,
   type ToolCallContext
 } from './types.ts'
@@ -26,6 +27,14 @@ type FoundJob = {
 
 function foregroundRemaining(job: Job): number {
   return Math.max(0, FOREGROUND_MS - (Date.now() - job.acceptedAt))
+}
+
+function operationResult(output: JobOperationOutput, job?: Job): ReplOperationResult {
+  if (job === undefined || job.images.length === 0) {
+    return { output, images: [] }
+  }
+
+  return { output, images: job.images.splice(0, job.images.length) }
 }
 
 async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal: AbortSignal) {
@@ -61,10 +70,10 @@ async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal:
   })
 }
 
-function foregroundSnapshot(cell: Cell, job: Job): JobOperationOutput {
+function foregroundSnapshot(cell: Cell, job: Job): ReplOperationResult {
   if (isTerminal(job.state)) {
     job.terminalNotificationDone = true
-    return snapshot(cell, job, job.startCursor, true)
+    return operationResult(snapshot(cell, job, job.startCursor, true), job)
   }
 
   job.backgrounded = true
@@ -72,7 +81,7 @@ function foregroundSnapshot(cell: Cell, job: Job): JobOperationOutput {
     job.inputNotificationSerial = job.inputSerial
   }
 
-  return snapshot(cell, job, job.startCursor, true)
+  return operationResult(snapshot(cell, job, job.startCursor, true), job)
 }
 
 function evaluate(state: RuntimeState): ReplRuntime['evaluate'] {
@@ -80,7 +89,7 @@ function evaluate(state: RuntimeState): ReplRuntime['evaluate'] {
     Effect.gen(function* () {
       const validation = yield* state.validateSession(context.sessionID)
       if (!validation.ok) {
-        return expected(validation.error.kind, validation.error.message)
+        return operationResult(expected(validation.error.kind, validation.error.message))
       }
 
       const admitted = yield* admitEvaluation(
@@ -90,7 +99,7 @@ function evaluate(state: RuntimeState): ReplRuntime['evaluate'] {
         validation.session.location.directory
       )
       if ('error' in admitted) {
-        return admitted.error
+        return operationResult(admitted.error)
       }
 
       yield* runJob(state, admitted.cell, admitted.job, code).pipe(
@@ -135,10 +144,10 @@ function findSessionJob(
 function statusOperation(found: FoundJob, input: Extract<JobInput, { action: 'status' }>) {
   const cursor = input.cursor ?? found.job.startCursor
   if (!Number.isSafeInteger(cursor) || cursor < 0) {
-    return expected('invalid_state', 'cursor must be a non-negative integer')
+    return operationResult(expected('invalid_state', 'cursor must be a non-negative integer'))
   }
 
-  return snapshot(found.cell, found.job, cursor)
+  return operationResult(snapshot(found.cell, found.job, cursor), found.job)
 }
 
 function isNodeStdinAllowed(job: Job): boolean {
@@ -189,12 +198,14 @@ function stdinOperation(
   state: RuntimeState,
   found: FoundJob,
   input: Extract<JobInput, { action: 'stdin' }>
-): Effect.Effect<JobOperationOutput> {
+): Effect.Effect<ReplOperationResult> {
   if (!isStdinAllowed(found)) {
     return Effect.succeed(
-      expected(
-        'invalid_state',
-        `stdin is not valid while job ${found.job.id} is ${found.job.state}`
+      operationResult(
+        expected(
+          'invalid_state',
+          `stdin is not valid while job ${found.job.id} is ${found.job.state}`
+        )
       )
     )
   }
@@ -202,7 +213,7 @@ function stdinOperation(
   return Effect.gen(function* () {
     const sent = yield* Effect.promise(async () => sendStdin(found, input.data))
     if (!sent.ok) {
-      return expected('runtime', `stdin failed: ${errorMessage(sent.error)}`)
+      return operationResult(expected('runtime', `stdin failed: ${errorMessage(sent.error)}`))
     }
 
     yield* state.locked(() =>
@@ -210,18 +221,23 @@ function stdinOperation(
         resumePythonAfterInput(found)
       })
     )
-    return snapshot(found.cell, found.job, found.job.startCursor, true)
+    return operationResult(snapshot(found.cell, found.job, found.job.startCursor, true), found.job)
   })
 }
 
-function cancelOperation(state: RuntimeState, found: FoundJob): Effect.Effect<JobOperationOutput> {
+function cancelOperation(
+  state: RuntimeState,
+  found: FoundJob
+): Effect.Effect<ReplOperationResult> {
   if (isTerminal(found.job.state)) {
-    return Effect.succeed(snapshot(found.cell, found.job, found.job.startCursor, true))
+    return Effect.succeed(
+      operationResult(snapshot(found.cell, found.job, found.job.startCursor, true), found.job)
+    )
   }
 
   if (found.cell.lifecycle === 'failed') {
     return Effect.succeed(
-      expected('lifecycle', found.cell.cleanupError ?? 'Cell teardown is unconfirmed')
+      operationResult(expected('lifecycle', found.cell.cleanupError ?? 'Cell teardown is unconfirmed'))
     )
   }
 
@@ -229,7 +245,8 @@ function cancelOperation(state: RuntimeState, found: FoundJob): Effect.Effect<Jo
     const fiber = yield* cancelWork(state, found.cell, found.job).pipe(
       Effect.forkIn(state.activationScope)
     )
-    return yield* Fiber.join(fiber)
+    const output = yield* Fiber.join(fiber)
+    return operationResult(output, found.job)
   })
 }
 
@@ -250,14 +267,14 @@ function jobOperation(state: RuntimeState): ReplRuntime['job'] {
     Effect.gen(function* () {
       const validation = yield* state.validateSession(context.sessionID)
       if (!validation.ok) {
-        return expected(validation.error.kind, validation.error.message)
+        return operationResult(expected(validation.error.kind, validation.error.message))
       }
 
       const found = yield* state.locked((map) =>
         Effect.sync(() => findSessionJob(map, context.sessionID, input.id))
       )
       if (found === undefined) {
-        return expected('not_found', `job ${input.id} was not found in this OpenCode session`)
+        return operationResult(expected('not_found', `job ${input.id} was not found in this OpenCode session`))
       }
 
       return yield* operateFound(state, found, input)

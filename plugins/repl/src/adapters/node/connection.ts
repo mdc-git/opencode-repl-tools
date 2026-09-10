@@ -118,7 +118,7 @@ class NodeConnection implements NodeInterpreter {
   }
 
   private onWorkerEvent(event: NodeWorkerEvent): void {
-    if (event.type === 'output') {
+    if (event.type === 'output' || event.type === 'image') {
       this.options.onEvent(event)
       return
     }
@@ -131,7 +131,9 @@ class NodeConnection implements NodeInterpreter {
     this.onLifecycleEvent(event)
   }
 
-  private onLifecycleEvent(event: Exclude<NodeWorkerEvent, { type: 'output' | 'done' }>): void {
+  private onLifecycleEvent(
+    event: Exclude<NodeWorkerEvent, { type: 'output' | 'image' | 'done' }>
+  ): void {
     if (event.type === 'ready') {
       this.readyResolve(event.nodeVersion)
       return

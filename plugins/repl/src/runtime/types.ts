@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import type { Plugin } from '@opencode/plugin/effect'
 import type { Effect, Scope } from 'effect'
-import { NodeStartupError, type NodeInterpreter } from '../adapters/node.ts'
+import { NodeStartupError, type NodeImage, type NodeInterpreter } from '../adapters/node.ts'
 import { PythonStartupError, type PythonInterpreter } from '../adapters/python.ts'
 import type { CleanupResult } from '../adapters/process-group.ts'
 import type {
@@ -40,6 +40,7 @@ export type Job = {
   readonly acceptedAt: number
   readonly foreground: SignalPair
   readonly completion: SignalPair
+  readonly images: NodeImage[]
   state: JobState
   error?: ReplError
   prompt?: string
@@ -68,13 +69,18 @@ export type Cell = {
   notificationsSuppressed: boolean
 }
 
+export type ReplOperationResult = {
+  readonly output: JobOperationOutput
+  readonly images: readonly NodeImage[]
+}
+
 export type ReplRuntime = {
   readonly evaluate: (
     language: Language,
     code: string,
     context: ToolCallContext
-  ) => Effect.Effect<JobOperationOutput>
-  readonly job: (input: JobInput, context: ToolCallContext) => Effect.Effect<JobOperationOutput>
+  ) => Effect.Effect<ReplOperationResult>
+  readonly job: (input: JobInput, context: ToolCallContext) => Effect.Effect<ReplOperationResult>
   readonly reset: (language: Language, context: ToolCallContext) => Effect.Effect<ResetOutput>
   readonly invalidateSession: (sessionID: SessionId) => Effect.Effect<void>
 }
@@ -187,6 +193,7 @@ export function newJob(cell: Cell, language: Language): Job {
     acceptedAt: Date.now(),
     foreground: signalPair(),
     completion: signalPair(),
+    images: [],
     state: 'starting',
     inputSerial: 0,
     inputNotificationSerial: 0,

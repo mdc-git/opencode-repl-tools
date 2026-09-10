@@ -11,6 +11,12 @@ export class NodeStartupError extends Error {
   }
 }
 
+export type NodeImage = {
+  readonly mime: string
+  readonly data: string
+  readonly name?: string
+}
+
 export type NodeEvent =
   | {
       readonly type: 'output'
@@ -18,6 +24,7 @@ export type NodeEvent =
       readonly text: string
       readonly jobId?: string
     }
+  | ({ readonly type: 'image'; readonly jobId: string } & NodeImage)
   | { readonly type: 'fatal'; readonly message: string }
 
 export type NodeEvalResult = {

@@ -1,5 +1,6 @@
 import {
   isBooleanValue,
+  optionalStringValue,
   protocolError,
   recordValue,
   stringValue,
@@ -14,6 +15,13 @@ export type NodeWorkerEvent =
       readonly jobId: string
       readonly stream: 'display' | 'stderr'
       readonly text: string
+    }
+  | {
+      readonly type: 'image'
+      readonly jobId: string
+      readonly mime: string
+      readonly data: string
+      readonly name?: string
     }
   | {
       readonly type: 'done'
@@ -42,6 +50,17 @@ function decodeOutput(event: JsonRecord): NodeWorkerEvent {
   }
 }
 
+function decodeImage(event: JsonRecord): NodeWorkerEvent {
+  const name = optionalStringValue(event, 'name', 'Node image event')
+  return {
+    type: 'image',
+    jobId: stringValue(event, 'jobId', 'Node image event'),
+    mime: stringValue(event, 'mime', 'Node image event'),
+    data: stringValue(event, 'data', 'Node image event'),
+    ...(name !== undefined && { name })
+  }
+}
+
 function decodeDone(event: JsonRecord): NodeWorkerEvent {
   const error = protocolError(event.error, 'Node done error')
   return {
@@ -59,6 +78,7 @@ function decodeFatal(event: JsonRecord): NodeWorkerEvent {
 const decoders: Readonly<Record<string, (event: JsonRecord) => NodeWorkerEvent>> = {
   ready: decodeReady,
   output: decodeOutput,
+  image: decodeImage,
   done: decodeDone,
   fatal: decodeFatal,
   shutdown: () => ({ type: 'shutdown' })

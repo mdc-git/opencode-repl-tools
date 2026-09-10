@@ -9,12 +9,21 @@ import {
   resetOutputSchema
 } from './src/model.ts'
 import { makeRuntime, type ReplRuntime } from './src/runtime.ts'
-import type { SessionId } from './src/runtime/types.ts'
+import type { ReplOperationResult, SessionId } from './src/runtime/types.ts'
 
 const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
 
-function sourceText(code: string | readonly string[]): string {
-  return typeof code === 'string' ? code : code.join('\n')
+function toolResult(result: ReplOperationResult) {
+  const content = result.images.map((image) => ({
+    type: 'file' as const,
+    uri: `data:${image.mime};base64,${image.data}`,
+    mime: image.mime,
+    ...(image.name !== undefined && { name: image.name })
+  }))
+  return {
+    output: result.output,
+    ...(content.length > 0 && { content })
+  }
 }
 
 function addTools(
@@ -24,24 +33,21 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline or template-heavy source so orchestration code does not need nested backticks or String.raw tagged templates.',
+      'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
-    execute: ({ code }, context) =>
-      runtime.evaluate('node', sourceText(code), context).pipe(Effect.map((output) => ({ output })))
+    execute: ({ code }, context) => runtime.evaluate('node', code, context).pipe(Effect.map(toolResult))
   })
   editor.add({
     name: 'repl_python',
     description:
-      'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls. The code field accepts either one string or an array of source lines joined with newlines. Prefer the array form for multiline source so orchestration code avoids fragile nested string escaping.',
+      'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
     execute: ({ code }, context) =>
-      runtime
-        .evaluate('python', sourceText(code), context)
-        .pipe(Effect.map((output) => ({ output })))
+      runtime.evaluate('python', code, context).pipe(Effect.map(toolResult))
   })
   editor.add({
     name: 'repl_job',
@@ -50,8 +56,7 @@ function addTools(
     input: jobInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
-    execute: (input, context) =>
-      runtime.job(input, context).pipe(Effect.map((output) => ({ output })))
+    execute: (input, context) => runtime.job(input, context).pipe(Effect.map(toolResult))
   })
   editor.add({
     name: 'repl_reset',

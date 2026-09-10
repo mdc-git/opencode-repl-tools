@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
@@ -5,6 +6,11 @@ import process from 'node:process'
 import repl from 'node:repl'
 import { PassThrough, Writable } from 'node:stream'
 import ts from 'typescript'
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const MAX_IMAGES_PER_EVALUATION = 4
+const MAX_TOTAL_IMAGE_BYTES = MAX_IMAGE_BYTES * MAX_IMAGES_PER_EVALUATION
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 function requiredCwd() {
   const index = process.argv.indexOf('--cwd')
@@ -51,6 +57,8 @@ const replOutput = new Writable({
 })
 let controlBuffer = ''
 let activeJobId
+let activeImageCount = 0
+let activeImageBytes = 0
 let isShuttingDown = false
 let isFatalSeen = false
 
@@ -92,6 +100,108 @@ function emit(message) {
   events.write(`${JSON.stringify(message)}\n`)
 }
 
+function clearActiveEvaluation() {
+  activeJobId = undefined
+  activeImageCount = 0
+  activeImageBytes = 0
+}
+
+function imageBytes(value) {
+  if (Buffer.isBuffer(value)) {
+    return value
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return Buffer.from(value)
+  }
+
+  throw new TypeError(
+    'opencode.emitImage bytes must be a Buffer, Uint8Array, ArrayBuffer, or array-buffer view'
+  )
+}
+
+function imageMimeType(value) {
+  if (typeof value !== 'string') {
+    throw new TypeError('opencode.emitImage mimeType must be a string')
+  }
+
+  const mime = value.toLowerCase()
+  if (!SUPPORTED_IMAGE_MIME_TYPES.has(mime)) {
+    throw new Error('opencode.emitImage supports PNG, JPEG, WebP, and GIF images only')
+  }
+
+  return mime
+}
+
+function imageName(value) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError('opencode.emitImage filename must be a non-empty string')
+  }
+
+  const name = path
+    .basename(value.trim())
+    .replaceAll(/[^\w.-]/gv, '_')
+    .slice(0, 255)
+  if (name.length === 0) {
+    throw new TypeError('opencode.emitImage filename must contain a valid filename')
+  }
+
+  return name
+}
+
+function emitImage(value) {
+  const jobId = activeJobId
+  if (jobId === undefined) {
+    throw new Error('opencode.emitImage requires an active repl_node evaluation')
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError('opencode.emitImage expects { bytes, mimeType, filename? }')
+  }
+
+  const bytes = imageBytes(value.bytes)
+  if (bytes.byteLength === 0) {
+    throw new Error('opencode.emitImage expected non-empty image bytes')
+  }
+
+  if (bytes.byteLength > MAX_IMAGE_BYTES) {
+    throw new Error(`opencode.emitImage image exceeds the ${MAX_IMAGE_BYTES}-byte limit`)
+  }
+
+  if (activeImageCount >= MAX_IMAGES_PER_EVALUATION) {
+    throw new Error(
+      `opencode.emitImage supports at most ${MAX_IMAGES_PER_EVALUATION} images per evaluation`
+    )
+  }
+
+  const nextBytes = activeImageBytes + bytes.byteLength
+  if (nextBytes > MAX_TOTAL_IMAGE_BYTES) {
+    throw new Error(
+      `opencode.emitImage images exceed the ${MAX_TOTAL_IMAGE_BYTES}-byte evaluation limit`
+    )
+  }
+
+  const mime = imageMimeType(value.mimeType)
+  const name = imageName(value.filename)
+  activeImageCount += 1
+  activeImageBytes = nextBytes
+  emit({
+    type: 'image',
+    jobId,
+    mime,
+    data: bytes.toString('base64'),
+    ...(name !== undefined && { name })
+  })
+}
+
 function closeWorker(exitCode) {
   isShuttingDown = true
   process.exitCode = exitCode
@@ -129,7 +239,7 @@ function handleReplError(error) {
     return 'ignore'
   }
 
-  activeJobId = undefined
+  clearActiveEvaluation()
   emitEvaluationFailure(jobId, error)
   return 'ignore'
 }
@@ -146,6 +256,7 @@ const server = repl.start({
   handleError: handleReplError
 })
 server.context.require = createRequire(path.join(sessionDirectory, '__opencode_repl__.js'))
+server.context.opencode = Object.freeze({ emitImage })
 
 function renderResult(jobId, result) {
   if (result === undefined) {
@@ -175,7 +286,7 @@ function finishEvaluation(jobId, error, result) {
     return
   }
 
-  activeJobId = undefined
+  clearActiveEvaluation()
   if (hasError(error)) {
     emitEvaluationFailure(jobId, error)
     return
@@ -201,6 +312,8 @@ function evaluate(jobId, code) {
   }
 
   activeJobId = jobId
+  activeImageCount = 0
+  activeImageBytes = 0
   server.eval(javascript, server.context, 'repl.ts', (error, result) =>
     finishEvaluation(jobId, error, result)
   )
