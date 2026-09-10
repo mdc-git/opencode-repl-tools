@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN set -eux; \
     groupadd --gid 1001 opencode-demo; \
     useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash opencode-demo; \
-    install -d -m 0755 -o opencode-demo -g opencode-demo /home/opencode-demo/.cache
+    chmod 0700 /home/opencode-demo
 
 FROM base AS ttyd-tooling
 ARG TTYD_VERSION
@@ -57,23 +57,31 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     set -eux; \
     requirements_sha="$(sha256sum /tmp/requirements.txt | cut -d' ' -f1)"; \
     python_version="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
-    venv="/home/opencode-demo/.cache/opencode/repl-tools/python/${python_version}/${requirements_sha}/venv"; \
+    venv="/opt/opencode-repl-cache/opencode/repl-tools/python/${python_version}/${requirements_sha}/venv"; \
     python3 -m venv "$venv"; \
     "$venv/bin/pip" install --disable-pip-version-check --no-compile -r /tmp/requirements.txt; \
-    chown -R opencode-demo:opencode-demo /home/opencode-demo/.cache/opencode
+    chmod -R a-w /opt/opencode-repl-cache; \
+    chmod -R a+rX /opt/opencode-repl-cache
 
 FROM base AS final
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
 COPY --from=gh-tooling /opt/gh/gh /usr/local/bin/gh
-COPY --from=opencode-tooling --chown=opencode-demo:opencode-demo /home/opencode-demo/.opencode/ /home/opencode-demo/.opencode/
+COPY --from=opencode-tooling /home/opencode-demo/.opencode/ /opt/opencode/
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
-COPY --from=python-dependencies --chown=opencode-demo:opencode-demo /home/opencode-demo/.cache/opencode/ /home/opencode-demo/.cache/opencode/
+COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
+COPY --chmod=0755 .devcontainer/run-demo-session.sh /usr/local/bin/run-demo-session
+COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
 RUN set -eux; \
+    chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session /usr/local/bin/publish-demo; \
+    chmod -R a-w /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
+    chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
     test -x /usr/local/bin/ttyd; \
     test -x /usr/local/bin/gh; \
-    test -x /home/opencode-demo/.opencode/bin/opencode2; \
+    test -x /opt/opencode/bin/opencode2; \
     test -x /usr/local/bin/run-demo-container; \
+    test -x /usr/local/bin/run-demo-session; \
+    test -x /usr/local/bin/publish-demo; \
     node --version; \
     python3 --version
 CMD ["/usr/local/bin/run-demo-container"]
