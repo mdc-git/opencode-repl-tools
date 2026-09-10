@@ -68,10 +68,12 @@ COPY --from=gh-tooling /opt/gh/gh /usr/local/bin/gh
 COPY --from=opencode-tooling --chown=opencode-demo:opencode-demo /home/opencode-demo/.opencode/ /home/opencode-demo/.opencode/
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies --chown=opencode-demo:opencode-demo /home/opencode-demo/.cache/opencode/ /home/opencode-demo/.cache/opencode/
+COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
 RUN set -eux; \
     test -x /usr/local/bin/ttyd; \
     test -x /usr/local/bin/gh; \
     test -x /home/opencode-demo/.opencode/bin/opencode2; \
+    test -x /usr/local/bin/run-demo-container; \
     node --version; \
     python3 --version
-CMD ["sleep", "infinity"]
+CMD ["/usr/local/bin/run-demo-container"]
