@@ -5,7 +5,9 @@ DEMO_USER=opencode-demo
 DEMO_HOME=/home/$DEMO_USER
 TTYD_VERSION=1.7.7
 
-sudo useradd --create-home --shell /bin/bash "$DEMO_USER"
+if ! id -u "$DEMO_USER" >/dev/null 2>&1; then
+  sudo useradd --create-home --shell /bin/bash "$DEMO_USER"
+fi
 sudo chmod 700 "$DEMO_HOME"
 
 source /usr/local/share/nvm/nvm.sh
