@@ -18,6 +18,13 @@ source /usr/local/share/nvm/nvm.sh
 NODE26_BIN=$(nvm which 26)
 NODE26_DIR=$(dirname "$NODE26_BIN")
 
+if [[ -z "${CODESPACE_NAME:-}" ]]; then
+  echo "CODESPACE_NAME is not set" >"$LOG"
+  exit 1
+fi
+
+gh codespace ports visibility "$PORT:public" -c "$CODESPACE_NAME" >"$LOG" 2>&1
+
 sudo -u "$DEMO_USER" -H env \
   HOME="$DEMO_HOME" \
   PATH="$NODE26_DIR:$DEMO_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" \
@@ -29,8 +36,4 @@ sudo -u "$DEMO_USER" -H env \
     --port "$PORT" \
     --cwd "$DEMO_ROOT" \
     "$DEMO_HOME/.opencode/bin/opencode2" --standalone "$DEMO_ROOT" \
-    >"$LOG" 2>&1 </dev/null &
-
-if command -v gh >/dev/null 2>&1 && [[ -n "${CODESPACE_NAME:-}" ]]; then
-  gh codespace ports visibility "$PORT:public" -c "$CODESPACE_NAME" >/dev/null 2>&1 || true
-fi
+    >>"$LOG" 2>&1 </dev/null &
