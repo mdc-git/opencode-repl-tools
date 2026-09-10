@@ -2,7 +2,6 @@
 set -euo pipefail
 
 DEMO_USER=opencode-demo
-DEMO_HOME=/home/$DEMO_USER
 DEMO_SOURCE=/opt/opencode-demo/source
 SOURCE=${OPENCODE_DEMO_SOURCE:-/workspaces/${RepositoryName:-opencode-repl-tools}}
 LOG=/root/.cache/opencode-repl-tools-preview.log
@@ -38,7 +37,7 @@ chmod 0700 "$SOURCE"
 
 while true; do
   runuser -u "$DEMO_USER" -- env -i \
-    HOME="$DEMO_HOME" \
+    HOME=/home/opencode-demo \
     USER="$DEMO_USER" \
     LOGNAME="$DEMO_USER" \
     SHELL=/bin/bash \
@@ -47,11 +46,19 @@ while true; do
     /usr/local/bin/ttyd \
       --writable \
       --check-origin \
-      --max-clients 1 \
+      --max-clients 4 \
+      --exit-no-conn \
       --interface 0.0.0.0 \
       --port "$PORT" \
-      /usr/local/bin/run-demo-session \
+      /usr/bin/tmux new-session -A -s opencode-demo /usr/local/bin/run-demo-session \
       >>"$LOG" 2>&1 || true
-  echo "ttyd exited; restarting" >>"$LOG"
+
+  # All browser clients are gone (or ttyd failed). Retire the shared PTY and
+  # OpenCode process before accepting a new cohort so auth/state never carries
+  # over from one disconnected visitor group to the next.
+  runuser -u "$DEMO_USER" -- /usr/bin/tmux kill-server >/dev/null 2>&1 || true
+  rm -rf /home/opencode-demo/session
+
+  echo "ttyd exited; restarting with a fresh demo session" >>"$LOG"
   sleep 1
 done
