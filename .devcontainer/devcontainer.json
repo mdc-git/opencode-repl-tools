@@ -1,11 +1,6 @@
 {
   "name": "OpenCode REPL Tools Preview",
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
-  "features": {
-    "ghcr.io/devcontainers/features/node:2": {
-      "version": "26"
-    }
-  },
+  "image": "mcr.microsoft.com/devcontainers/universal:linux",
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
@@ -13,6 +8,10 @@
       "onAutoForward": "openBrowserOnce"
     }
   },
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y python3 python3-venv python3-pip ttyd && npm install --global bun @opencode/cli@beta && bun install",
-  "postStartCommand": "nohup ttyd --writable --interface 0.0.0.0 --port 7681 --cwd \"${containerWorkspaceFolder}\" opencode2 --standalone \"${containerWorkspaceFolder}\" >/dev/null 2>&1 </dev/null &"
+  "postCreateCommand": {
+    "node": "bash -lc 'source /usr/local/share/nvm/nvm.sh && nvm install 26 && nvm alias default 26'",
+    "runtime": "bash -lc 'curl -fsSL https://bun.com/install | bash && \"$HOME/.bun/bin/bun\" install -g --trust @opencode/cli@beta && \"$HOME/.bun/bin/bun\" install --production'",
+    "ttyd": "bash -lc 'mkdir -p \"$HOME/.local/bin\" && curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o \"$HOME/.local/bin/ttyd\" && chmod 755 \"$HOME/.local/bin/ttyd\"'"
+  },
+  "postStartCommand": "nohup bash -lc 'source /usr/local/share/nvm/nvm.sh && nvm use 26 >/dev/null && exec \"$HOME/.local/bin/ttyd\" --writable --interface 0.0.0.0 --port 7681 --cwd \"${containerWorkspaceFolder}\" \"$HOME/.bun/bin/opencode2\" --standalone \"${containerWorkspaceFolder}\"' >\"$HOME/.cache/opencode-repl-tools-preview.log\" 2>&1 </dev/null &"
 }
