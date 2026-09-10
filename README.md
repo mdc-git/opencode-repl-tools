@@ -8,17 +8,17 @@ The plugin runs trusted local code on Linux. It is not a sandbox.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools/tree/demo?quickstart=1)
 
-The `demo` branch is configured for a GitHub Codespaces prebuild. The prebuild installs Node 26, OpenCode V2, `ttyd`, and the plugin's production dependencies. Visitor startup only prepares a disposable demo workspace, starts the OpenCode TUI, and publishes forwarded port `7681`.
+The `demo` branch launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
 
-The browser TUI runs as the dedicated `opencode-demo` Unix user with a clean `HOME`, explicit runtime paths, and a fresh copy of the repository without Git metadata. OpenCode and the REPL workers do not inherit the normal Codespaces user's environment.
+The browser TUI runs as the dedicated `opencode-demo` Unix user with a clean `HOME`, explicit runtime paths, and a fresh copy of the repository without Git metadata. OpenCode and the REPL workers do not inherit the normal Codespaces environment.
 
-After the Codespace starts, open the `OpenCode TUI` forwarded port or visit:
+After the Codespace starts, the launcher waits for `ttyd`, makes forwarded port `7681` public, verifies the port visibility, and opens:
 
 ```text
 https://<codespace-name>-7681.app.github.dev/
 ```
 
-The launcher requests public visibility for port `7681`, so the GitHub private-port authentication layer does not sit in front of the demo endpoint. Public-port availability depends on the repository or organization Codespaces policy.
+Public-port availability depends on the repository or organization Codespaces policy.
 
 Connect an LLM provider from the TUI with `/connect`, then ask OpenCode to use `repl_node` or `repl_python`.
 
@@ -28,9 +28,7 @@ If the browser terminal does not start, inspect:
 cat "$HOME/.cache/opencode-repl-tools-preview.log"
 ```
 
-### Prebuild
-
-Configure a Codespaces prebuild for branch `demo` in the repository's **Settings → Codespaces** page. Keep the prebuild current so visitors receive the prepared runtime instead of running installation commands during Codespace creation.
+The demo image is built by `.github/workflows/build-demo-image.yml`. BuildKit cache keeps its independent toolchain and dependency stages reusable. A Codespaces prebuild can additionally snapshot the ready image for the `demo` branch if minimum cold-start latency is required.
 
 ## Requirements
 
