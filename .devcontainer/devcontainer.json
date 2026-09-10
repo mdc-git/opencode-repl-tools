@@ -1,5 +1,6 @@
 {
   "name": "OpenCode REPL Tools Demo",
+  "image": "ghcr.io/mdc-git/opencode-repl-tools-demo:demo",
   "remoteUser": "root",
   "forwardPorts": [7681],
   "portsAttributes": {
@@ -8,8 +9,6 @@
       "onAutoForward": "silent"
     }
   },
-  "onCreateCommand": "bash .devcontainer/prepare-demo.sh",
-  "updateContentCommand": "npm install --omit=dev --ignore-scripts --no-package-lock --no-audit --no-fund",
   "postStartCommand": "bash .devcontainer/start-demo.sh",
   "postAttachCommand": "bash .devcontainer/publish-demo.sh"
 }
