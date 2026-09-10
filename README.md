@@ -50,11 +50,7 @@ For multiline or template-heavy source, `code` can instead be an array of source
 
 ```json
 {
-  "code": [
-    "const name = 'world'",
-    "const message = `hello ${name}`",
-    "message"
-  ]
+  "code": ["const name = 'world'", "const message = `hello ${name}`", "message"]
 }
 ```
 
@@ -74,10 +70,7 @@ Python source also accepts the same line-array form:
 
 ```json
 {
-  "code": [
-    "counter = globals().get('counter', 0) + 1",
-    "counter"
-  ]
+  "code": ["counter = globals().get('counter', 0) + 1", "counter"]
 }
 ```
 
