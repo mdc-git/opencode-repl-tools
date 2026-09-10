@@ -9,10 +9,10 @@ PORT=7681
 
 mkdir -p "$HOME/.cache"
 rm -rf "$DEMO_ROOT"
-sudo install -d -m 755 -o "$DEMO_USER" -g "$DEMO_USER" "$DEMO_ROOT"
-sudo cp -a "${PWD}/." "$DEMO_ROOT/"
-sudo chown -R "$DEMO_USER:$DEMO_USER" "$DEMO_ROOT"
-sudo rm -rf "$DEMO_ROOT/.git"
+install -d -m 755 -o "$DEMO_USER" -g "$DEMO_USER" "$DEMO_ROOT"
+cp -a "${PWD}/." "$DEMO_ROOT/"
+chown -R "$DEMO_USER:$DEMO_USER" "$DEMO_ROOT"
+rm -rf "$DEMO_ROOT/.git"
 
 source /usr/local/share/nvm/nvm.sh
 NODE26_BIN=$(nvm which 26)
@@ -25,7 +25,7 @@ fi
 
 gh codespace ports visibility "$PORT:public" -c "$CODESPACE_NAME" >"$LOG" 2>&1
 
-sudo -u "$DEMO_USER" -H env \
+runuser -u "$DEMO_USER" -- env \
   HOME="$DEMO_HOME" \
   PATH="$NODE26_DIR:$DEMO_HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" \
   OPENCODE_REPL_NODE="$NODE26_BIN" \
