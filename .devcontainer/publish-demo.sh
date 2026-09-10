@@ -6,14 +6,14 @@ LOG=$HOME/.cache/opencode-repl-tools-preview.log
 CODESPACE=${CODESPACE_NAME:?CODESPACE_NAME is not set}
 
 for _ in $(seq 1 30); do
-  if ss -ltn | grep -q ":$PORT "; then
+  if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
     break
   fi
   sleep 1
 done
 
-if ! ss -ltn | grep -q ":$PORT "; then
-  echo "ttyd is not listening on port $PORT" >>"$LOG"
+if ! curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+  echo "ttyd is not responding on port $PORT" >>"$LOG"
   exit 1
 fi
 
