@@ -8,9 +8,17 @@ The plugin runs trusted local code on Linux. It is not a sandbox.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools/tree/demo?quickstart=1)
 
-The Codespaces configuration starts the real OpenCode V2 TUI behind `ttyd` and opens it through a private forwarded port. The preview uses the checkout's local plugin configuration and runs OpenCode in standalone mode, so the Codespace owns its server and REPL worker processes.
+The Codespaces configuration starts the real OpenCode V2 TUI behind `ttyd` on private forwarded port `7681`. The preview uses the checkout's local plugin configuration and runs OpenCode in standalone mode, so the Codespace owns its server and REPL worker processes.
+
+After creating or rebuilding the Codespace, GitHub should open the forwarded `OpenCode TUI` port automatically. You can also open port `7681` from the Codespaces **Ports** panel. Keep this port private because the terminal is writable and can execute code inside the Codespace.
 
 Connect an LLM provider from the TUI with `/connect`, then ask OpenCode to use `repl_node` or `repl_python` to exercise the plugin.
+
+If the browser terminal does not start, inspect:
+
+```sh
+cat "$HOME/.cache/opencode-repl-tools-preview.log"
+```
 
 ## Requirements
 
