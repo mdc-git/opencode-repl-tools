@@ -46,7 +46,8 @@ const replErrorSchema = struct({
 })
 export type ReplError = typeof replErrorSchema.Type
 
-export const evalInputSchema = struct({ code: Schema.String })
+const sourceSchema = union([Schema.String, array(Schema.String)])
+export const evalInputSchema = struct({ code: sourceSchema })
 
 const jobStatusInputSchema = struct({
   action: literal('status'),
