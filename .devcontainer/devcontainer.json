@@ -1,6 +1,5 @@
 {
   "name": "OpenCode REPL Tools Preview",
-  "image": "mcr.microsoft.com/devcontainers/universal:linux",
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
@@ -10,8 +9,9 @@
   },
   "postCreateCommand": {
     "node": "bash -lc 'source /usr/local/share/nvm/nvm.sh && nvm install 26 && nvm alias default 26'",
-    "runtime": "bash -lc 'curl -fsSL https://bun.com/install | bash && \"$HOME/.bun/bin/bun\" install -g --trust @opencode/cli@beta && \"$HOME/.bun/bin/bun\" install --production'",
+    "dependencies": "npm install --omit=dev --ignore-scripts --no-package-lock --no-audit --no-fund",
+    "opencode": "bash -lc 'mkdir -p \"$HOME/.local/bin\" && curl -fsSL https://opencode.ai/v2/install | OPENCODE_INSTALL_DIR=\"$HOME/.local/bin\" bash'",
     "ttyd": "bash -lc 'mkdir -p \"$HOME/.local/bin\" && curl -fsSL https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 -o \"$HOME/.local/bin/ttyd\" && chmod 755 \"$HOME/.local/bin/ttyd\"'"
   },
-  "postStartCommand": "nohup bash -lc 'source /usr/local/share/nvm/nvm.sh && nvm use 26 >/dev/null && exec \"$HOME/.local/bin/ttyd\" --writable --interface 0.0.0.0 --port 7681 --cwd \"${containerWorkspaceFolder}\" \"$HOME/.bun/bin/opencode2\" --standalone \"${containerWorkspaceFolder}\"' >\"$HOME/.cache/opencode-repl-tools-preview.log\" 2>&1 </dev/null &"
+  "postStartCommand": "nohup bash -lc 'source /usr/local/share/nvm/nvm.sh && nvm use 26 >/dev/null && exec \"$HOME/.local/bin/ttyd\" --writable --interface 0.0.0.0 --port 7681 --cwd \"${containerWorkspaceFolder}\" \"$HOME/.local/bin/opencode2\" --standalone \"${containerWorkspaceFolder}\"' >\"$HOME/.cache/opencode-repl-tools-preview.log\" 2>&1 </dev/null &"
 }
