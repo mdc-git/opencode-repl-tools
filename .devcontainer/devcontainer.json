@@ -5,10 +5,11 @@
   "portsAttributes": {
     "7681": {
       "label": "OpenCode TUI",
-      "onAutoForward": "openBrowserOnce"
+      "onAutoForward": "silent"
     }
   },
   "onCreateCommand": "bash .devcontainer/prepare-demo.sh",
   "updateContentCommand": "npm install --omit=dev --ignore-scripts --no-package-lock --no-audit --no-fund",
-  "postStartCommand": "bash .devcontainer/start-demo.sh"
+  "postStartCommand": "bash .devcontainer/start-demo.sh",
+  "postAttachCommand": "bash .devcontainer/publish-demo.sh"
 }
