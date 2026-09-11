@@ -5,6 +5,7 @@ DEMO_HOME=/home/opencode-demo
 SESSION_ROOT=$DEMO_HOME/session
 SESSION_HOME=$SESSION_ROOT/home
 WORKSPACE=$SESSION_HOME/workspace
+TMPDIR=$SESSION_HOME/tmp
 DEMO_SOURCE=/opt/opencode-demo/source
 PYTHON_CACHE=/opt/opencode-repl-cache/opencode/repl-tools/python
 
@@ -15,7 +16,7 @@ if ! flock -n 9; then
 fi
 
 rm -rf "$SESSION_ROOT"
-install -d -m 0700 "$SESSION_HOME"
+install -d -m 0700 "$SESSION_HOME" "$TMPDIR"
 install -d -m 0755 "$WORKSPACE"
 cp -a "$DEMO_SOURCE/." "$WORKSPACE/"
 chmod -R u+rwX "$WORKSPACE"
@@ -27,6 +28,7 @@ ln -s "$PYTHON_CACHE" "$SESSION_HOME/.cache/opencode/repl-tools/python"
 cd "$WORKSPACE"
 exec env -i \
   HOME="$SESSION_HOME" \
+  TMPDIR="$TMPDIR" \
   USER=opencode-demo \
   LOGNAME=opencode-demo \
   SHELL=/bin/bash \
