@@ -8,31 +8,34 @@ The plugin runs trusted local code on Linux. It is not a sandbox.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools?quickstart=1)
 
-The demo launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
+The Codespace is a trusted controller, not the public execution environment. It uses the host Docker daemon to start `ghcr.io/mdc-git/opencode-repl-tools-demo:demo` as a separate sandbox container and proxies only the sandbox terminal through forwarded port `7681`.
 
-The browser TUI runs as the dedicated `opencode-demo` Unix user. The container first snapshots the repository into a root-owned read-only source tree, then removes access by the demo identity to the real `/workspaces` checkout. Root lifecycle commands execute image-owned scripts rather than files from the mutable checkout.
+The sandbox image contains OpenCode V, Node 26, Python, `ttyd`, the plugin's production dependencies, the prewarmed Python REPL environment, and a root-owned read-only demo source snapshot. It does not contain GitHub CLI or the Codespaces publisher.
 
-Up to four browser tabs or windows can attach to the same active OpenCode TUI through a shared `tmux` session. When the last browser disconnects, `ttyd` exits, the shared OpenCode process is retired, and the disposable OpenCode HOME and writable workspace are removed before the next connection cohort starts. Shared OpenCode binaries, Node dependencies, and the prewarmed Python environment are root-owned and read-only.
+The public sandbox receives no checkout bind mount, no Docker socket, and no GitHub or Codespaces credentials. It runs as UID/GID 1001 with a read-only root filesystem, all Linux capabilities dropped, `no_new_privs`, a private cgroup namespace, bounded CPU, memory, process count, file descriptors, and size-limited writable tmpfs mounts for its home and temporary directory. Docker's normal PID, mount, IPC, UTS, network, seccomp, and cgroup isolation remain in effect.
 
-OpenCode and the REPL workers start from a minimal explicit environment and do not inherit the normal Codespaces environment, including `GITHUB_TOKEN` or Codespaces secrets.
+Up to four browser tabs or windows can attach to the same active OpenCode TUI through a shared `tmux` session. When the last browser disconnects, `ttyd` exits, the shared OpenCode process is retired, and the disposable OpenCode HOME and writable workspace are removed before the next connection cohort starts. Shared OpenCode binaries, Node dependencies, the source snapshot, and the prewarmed Python environment remain read-only.
 
-After the Codespace starts, the image-owned publisher waits for `ttyd`, makes forwarded port `7681` public, verifies the port visibility, and opens:
+OpenCode and the REPL workers start from a minimal explicit environment. The sandbox has outbound networking so users can connect an LLM provider, but provider credentials entered during an active public session are readable by code running as the same sandbox identity. Do not enter a valuable credential into a public demo session.
+
+After the Codespace starts, the controller waits for the sandbox terminal, makes forwarded port `7681` public, verifies the port visibility, and opens:
 
 ```text
 https://<codespace-name>-7681.app.github.dev/
 ```
 
-Public-port availability depends on the repository or organization Codespaces policy. The public terminal intentionally permits arbitrary code execution as `opencode-demo`; anyone who can reach the URL controls the active demo session. Do not enter a valuable provider credential into a public demo session. A credential connected during the active session is readable by code running as the same Unix identity even though it is removed before the next browser cohort starts.
+Public-port availability depends on the repository or organization Codespaces policy. Anyone who can reach the URL controls the active public demo session.
 
 Connect an LLM provider from the TUI with `/connect`, then ask OpenCode to use `repl_node` or `repl_python`.
 
-If the browser terminal does not start, inspect:
+If the browser terminal does not start, inspect the controller log and sandbox log:
 
 ```sh
 cat "$HOME/.cache/opencode-repl-tools-preview.log"
+docker logs opencode-repl-tools-demo-sandbox
 ```
 
-The demo image is built by `.github/workflows/build-demo-image.yml`. BuildKit cache keeps its independent toolchain and dependency stages reusable. The image smoke test also verifies that the public demo identity cannot read the real source checkout or modify the shared runtime. A Codespaces prebuild can additionally snapshot the ready image for the repository's default branch when minimum cold-start latency is required.
+The demo image is built by `.github/workflows/build-demo-image.yml`. CI builds and smoke-tests the exact sandbox launch policy before publishing the `:demo` tag, including the read-only filesystem, absent host mounts and Docker socket, non-root identity, capability and `no_new_privs` state, resource limits, and absence of GitHub credential variables.
 
 ## Requirements
 
@@ -61,7 +64,7 @@ The current pinned requirements are:
 
 ```text
 ipykernel==7.3.0
-jupyter_client==8.10.0
+jupyter_client=8.10.0
 ```
 
 Concurrent first users share the same bootstrap. Cancelling one waiting REPL request does not cancel that shared work, but unloading the plugin does. Failed bootstraps are not cached.
@@ -182,4 +185,4 @@ bun run fix
 
 The dependency architecture enforced by ESLint reflects the current implementation: package entry → core/contracts; core → core/contracts/adapters; adapters → adapters/contracts/utils; contracts and utils are inward-only; worker code is isolated. Dependency Cruiser separately treats circular dependencies and deprecated Node core modules as errors and reports orphan modules as warnings.
 
-The root package intentionally keeps `@opencode/plugin` at the literal `beta` tag. TypeScript is a runtime dependency because the Node worker transpiles snippets before evaluation.
+The root package intentionally keeps `@opencode/plugin` at the literal `beta`. TypeScript is a runtime dependency because the Node worker transpiles snippets before evaluation.

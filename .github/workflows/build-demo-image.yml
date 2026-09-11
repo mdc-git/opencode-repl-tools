@@ -4,14 +4,22 @@ on:
   push:
     branches: [master]
     paths:
+      - .dockerignore
       - .devcontainer/Dockerfile
       - .devcontainer/run-demo-container.sh
       - .devcontainer/run-demo-session.sh
-      - .devcontainer/publish-demo.sh
+      - .devcontainer/run-demo-sandbox.sh
       - package.json
-      - plugins/repl/requirements.txt
+      - bun.lock
+      - README.md
+      - .opencode/**
+      - plugins/**
       - .github/workflows/build-demo-image.yml
   workflow_dispatch:
+
+concurrency:
+  group: demo-image-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -23,50 +31,38 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: .devcontainer/Dockerfile
-          push: true
+          load: true
+          push: false
           tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
 
-      - name: Smoke test browser terminal image
+      - name: Smoke test sandbox image
         shell: bash
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
-          source_dir="$(mktemp -d)"
-          cp -a "$PWD/." "$source_dir/"
+          name=opencode-repl-tools-demo-smoke
 
-          docker pull "$image"
-          docker run --detach --name opencode-repl-tools-demo-smoke \
-            --env RepositoryName=opencode-repl-tools \
-            --env GH_TOKEN=smoke-secret \
-            --env GITHUB_TOKEN=smoke-secret \
-            --env GITHUB_CODESPACE_TOKEN=smoke-secret \
-            --publish 127.0.0.1:7681:7681 \
-            --volume "$source_dir:/workspaces/opencode-repl-tools" \
-            "$image"
-          trap 'docker logs opencode-repl-tools-demo-smoke || true; docker exec opencode-repl-tools-demo-smoke cat /root/.cache/opencode-repl-tools-preview.log 2>/dev/null || true; docker rm --force opencode-repl-tools-demo-smoke >/dev/null 2>&1 || true; chmod -R u+rwX "$source_dir" 2>/dev/null || true; rm -rf "$source_dir"' EXIT
+          .devcontainer/run-demo-sandbox.sh "$image" "$name" "127.0.0.1:7681"
+          trap 'docker logs "$name" || true; docker rm --force "$name" >/dev/null 2>&1 || true' EXIT
 
           for _ in $(seq 1 100); do
             if curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null; then
               break
             fi
-            if ! docker inspect --format '{{.State.Running}}' opencode-repl-tools-demo-smoke | grep -qx true; then
-              echo 'demo container exited before ttyd became ready' >&2
+            if ! docker inspect --format '{{.State.Running}}' "$name" | grep -qx true; then
+              echo 'demo sandbox exited before ttyd became ready' >&2
               exit 1
             fi
             sleep 0.1
@@ -74,60 +70,56 @@ jobs:
 
           curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null
 
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -r /workspaces/opencode-repl-tools/package.json
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -r /root
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -x /usr/local/bin/gh
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -x /usr/local/bin/publish-demo
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -x /usr/local/bin/run-demo-container
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /tmp
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /var/tmp
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /dev/shm
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /opt/opencode/bin/opencode2
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /opt/opencode-repl-tools/node_modules
-          docker exec opencode-repl-tools-demo-smoke \
-            runuser -u opencode-demo -- test ! -w /opt/opencode-repl-cache
+          test "$(docker inspect --format '{{.Config.User}}' "$name")" = "1001:1001"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$name")" = true
+          test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$name")" = false
+          test "$(docker inspect --format '{{.HostConfig.PidsLimit}}' "$name")" = 128
+          test "$(docker inspect --format '{{.HostConfig.Memory}}' "$name")" = 2147483648
+          test "$(docker inspect --format '{{.HostConfig.NanoCpus}}' "$name")" = 2000000000
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$name")" = bridge
+          test "$(docker inspect --format '{{.HostConfig.CgroupnsMode}}' "$name")" = private
+          docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
+          docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name" | grep -Eq 'no-new-privileges'
+          test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$name")" = null
 
-          docker exec opencode-repl-tools-demo-smoke \
-            sh -ceu '
-              test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
-              test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
+          if docker inspect --format '{{json .Config.Env}}' "$name"                 | grep -Eq '(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)='; then
+            echo 'GitHub credential variable configured in public sandbox' >&2
+            exit 1
+          fi
 
-              if tr "\000" "\n" </proc/1/environ | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
-                echo "GitHub credential retained by container root process" >&2
-                exit 1
-              fi
+          docker exec "$name" test ! -e /var/run/docker.sock
+          docker exec "$name" test ! -e /workspaces
+          docker exec "$name" test ! -e /usr/local/bin/gh
+          docker exec "$name" test ! -e /usr/local/bin/publish-demo
+          docker exec "$name" test -r /opt/opencode-demo/source/package.json
+          docker exec "$name" test ! -w /opt/opencode-demo/source/package.json
+          docker exec "$name" test ! -w /opt/opencode/bin/opencode2
+          docker exec "$name" test ! -w /opt/opencode-repl-tools/node_modules
+          docker exec "$name" test ! -w /opt/opencode-repl-cache
+          docker exec "$name" sh -ceu 'test ! -w /; test -w "$HOME"; test -w /tmp'
 
-              ttyd_pid=
-              for proc in /proc/[0-9]*; do
-                status="$proc/status"
-                if [ -r "$status" ] \
-                  && grep -Eq "^Name:[[:space:]]+ttyd$" "$status" \
-                  && grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" "$status"; then
-                  ttyd_pid=${proc##*/}
-                  break
-                fi
-              done
-              test -n "$ttyd_pid"
+          docker exec "$name" sh -ceu '
+            test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
+            test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
 
-              grep -Eq "^NoNewPrivs:[[:space:]]+1$" "/proc/$ttyd_pid/status"
-              for field in CapInh CapPrm CapEff CapBnd CapAmb; do
-                grep -Eq "^${field}:[[:space:]]+0+$" "/proc/$ttyd_pid/status"
-              done
+            grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" /proc/1/status
+            grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/1/status
+            for field in CapInh CapPrm CapEff CapBnd CapAmb; do
+              grep -Eq "^${field}:[[:space:]]+0+$" /proc/1/status
+            done
 
-              if tr "\000" "\n" <"/proc/$ttyd_pid/environ" | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
-                echo "GitHub credential leaked into public ttyd environment" >&2
-                exit 1
-              fi
-            '
+            if tr "\000" "\n" </proc/1/environ                   | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
+              echo "GitHub credential leaked into public sandbox process" >&2
+              exit 1
+            fi
+          '
 
-          docker exec opencode-repl-tools-demo-smoke test -x /usr/local/bin/publish-demo
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish validated image
+        shell: bash
+        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"

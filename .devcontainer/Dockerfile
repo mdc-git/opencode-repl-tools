@@ -2,7 +2,6 @@
 
 ARG NODE_IMAGE=node:26.8.2-bookworm-slim
 ARG TTYD_VERSION=1.7.7
-ARG GH_VERSION=2.100.0
 ARG OPENCODE_CACHE_KEY=2026-09-10
 
 FROM ${NODE_IMAGE} AS base
@@ -24,17 +23,6 @@ RUN set -eux; \
     curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64" -o /tmp/ttyd; \
     grep ' ttyd.x86_64$' /tmp/ttyd-checksums | sed 's#ttyd.x86_64#/tmp/ttyd#' | sha256sum -c -; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
-
-FROM base AS gh-tooling
-ARG GH_VERSION
-RUN set -eux; \
-    archive="gh_${GH_VERSION}_linux_amd64.tar.gz"; \
-    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_checksums.txt" -o /tmp/gh-checksums; \
-    curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/${archive}" -o "/tmp/${archive}"; \
-    cd /tmp; \
-    grep " ${archive}$" gh-checksums | sha256sum -c -; \
-    tar -xzf "${archive}"; \
-    install -D -m 0755 "gh_${GH_VERSION}_linux_amd64/bin/gh" /opt/gh/gh
 
 FROM base AS opencode-tooling
 ARG OPENCODE_CACHE_KEY
@@ -65,29 +53,32 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 FROM base AS final
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
-COPY --from=gh-tooling /opt/gh/gh /usr/local/bin/gh
 COPY --from=opencode-tooling /home/opencode-demo/.opencode/ /opt/opencode/
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
 COPY --chmod=0755 .devcontainer/run-demo-session.sh /usr/local/bin/run-demo-session
-COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
+COPY package.json bun.lock README.md /opt/opencode-demo/source/
+COPY .opencode/ /opt/opencode-demo/source/.opencode/
+COPY plugins/ /opt/opencode-demo/source/plugins/
 RUN set -eux; \
-    chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /usr/local/bin/gh /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session /usr/local/bin/publish-demo; \
-    chmod -R a-w /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
-    chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
-    chmod 0700 /root /usr/local/bin/gh /usr/local/bin/run-demo-container /usr/local/bin/publish-demo; \
-    chmod 0755 /usr/local/bin/ttyd /usr/local/bin/run-demo-session; \
+    chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /opt/opencode-demo /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session; \
+    chmod -R a-w /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /opt/opencode-demo; \
+    chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /opt/opencode-demo; \
+    chmod 0700 /home/opencode-demo; \
+    chmod 0755 /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session; \
     find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +; \
     find / -xdev \( -type f -o -type d \) -perm -0002 -exec chmod o-w {} +; \
     test -x /usr/local/bin/ttyd; \
-    test -x /usr/local/bin/gh; \
     test -x /usr/bin/tmux; \
-    test -x /usr/bin/setpriv; \
     test -x /opt/opencode/bin/opencode2; \
     test -x /usr/local/bin/run-demo-container; \
     test -x /usr/local/bin/run-demo-session; \
-    test -x /usr/local/bin/publish-demo; \
+    test -f /opt/opencode-demo/source/package.json; \
+    test -f /opt/opencode-demo/source/.opencode/index.ts; \
     node --version; \
     python3 --version
+ENV HOME=/home/opencode-demo
+WORKDIR /home/opencode-demo
+USER opencode-demo
 CMD ["/usr/local/bin/run-demo-container"]
