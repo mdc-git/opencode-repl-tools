@@ -57,7 +57,7 @@ function imageName(value) {
 
   const name = path
     .basename(requiredImageName(value))
-    .replaceAll(/[^\w.\x2d]/gv, '_')
+    .replaceAll(/[^\w\u{2D}.]/gv, '_')
     .slice(0, 255)
   if (name.length === 0) {
     throw new TypeError('opencode.emitImage filename must contain a valid filename')
