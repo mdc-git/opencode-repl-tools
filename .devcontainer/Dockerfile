@@ -3,7 +3,7 @@
 ARG NODE_IMAGE=node:26.8.2-bookworm-slim
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
-ARG OPENCODE_VERSION=0.0.0-beta-19271
+ARG OPENCODE_BETA_CACHE_KEY=local
 
 FROM ${NODE_IMAGE} AS node-runtime
 
@@ -26,17 +26,21 @@ RUN set -eux; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
 
 FROM node-runtime AS opencode-tooling
-ARG OPENCODE_VERSION
+ARG OPENCODE_BETA_CACHE_KEY
 RUN --mount=type=cache,target=/root/.npm \
     set -eux; \
-    npm install --global --prefix /opt/opencode --no-audit --no-fund "@opencode-ai/cli@${OPENCODE_VERSION}"; \
+    test -n "$OPENCODE_BETA_CACHE_KEY"; \
+    npm install --global --prefix /opt/opencode --no-audit --no-fund "@opencode/cli@beta"; \
     test -x /opt/opencode/bin/opencode2; \
     /opt/opencode/bin/opencode2 --version
 
 FROM node-runtime AS node-dependencies
+ARG OPENCODE_BETA_CACHE_KEY
 WORKDIR /opt/opencode-repl-tools
 COPY package.json ./
 RUN --mount=type=cache,target=/root/.npm \
+    set -eux; \
+    test -n "$OPENCODE_BETA_CACHE_KEY"; \
     npm install --omit=dev --ignore-scripts --package-lock=false --no-audit --no-fund
 
 FROM tooling-base AS python-dependencies
