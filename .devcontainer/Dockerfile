@@ -56,7 +56,7 @@ COPY plugins/repl/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     set -eux; \
     requirements_sha="$(sha256sum /tmp/requirements.txt | cut -d' ' -f1)"; \
-    python_version="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
+    python_version="$(python3 -c 'import sys; print(f"${sys.version_info.major}.${sys.version_info.minor}")')"; \
     venv="/opt/opencode-repl-cache/opencode/repl-tools/python/${python_version}/${requirements_sha}/venv"; \
     python3 -m venv "$venv"; \
     "$venv/bin/pip" install --disable-pip-version-check --no-compile -r /tmp/requirements.txt; \
@@ -73,12 +73,17 @@ COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-co
 COPY --chmod=0755 .devcontainer/run-demo-session.sh /usr/local/bin/run-demo-session
 COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
 RUN set -eux; \
-    chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session /usr/local/bin/publish-demo; \
+    chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /usr/local/bin/gh /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session /usr/local/bin/publish-demo; \
     chmod -R a-w /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
     chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
+    chmod 0700 /root /usr/local/bin/gh /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/publish-demo; \
+    chmod 0755 /usr/local/bin/run-demo-session; \
+    find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +; \
+    find / -xdev \( -type f -o -type d \) -perm -0002 -exec chmod o-w {} +; \
     test -x /usr/local/bin/ttyd; \
     test -x /usr/local/bin/gh; \
     test -x /usr/bin/tmux; \
+    test -x /usr/bin/setpriv; \
     test -x /opt/opencode/bin/opencode2; \
     test -x /usr/local/bin/run-demo-container; \
     test -x /usr/local/bin/run-demo-session; \
