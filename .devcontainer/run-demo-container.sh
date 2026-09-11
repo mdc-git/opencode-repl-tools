@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${OPENCODE_DEMO_ENV_SANITIZED:-}" != 1 ]]; then
+  exec env -i \
+    HOME=/root \
+    LANG=C.UTF-8 \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    RepositoryName="${RepositoryName:-opencode-repl-tools}" \
+    OPENCODE_DEMO_SOURCE="${OPENCODE_DEMO_SOURCE:-}" \
+    OPENCODE_DEMO_ENV_SANITIZED=1 \
+    "$0"
+fi
+
 DEMO_USER=opencode-demo
 DEMO_UID=$(id -u "$DEMO_USER")
 DEMO_GID=$(id -g "$DEMO_USER")
@@ -10,6 +21,11 @@ DEMO_SOURCE=/opt/opencode-demo/source
 SOURCE=${OPENCODE_DEMO_SOURCE:-/workspaces/${RepositoryName:-opencode-repl-tools}}
 LOG=/root/.cache/opencode-repl-tools-preview.log
 PORT=7681
+
+umask 077
+ulimit -c 0
+ulimit -n 256
+ulimit -u 128
 
 mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
