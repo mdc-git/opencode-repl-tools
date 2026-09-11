@@ -140,9 +140,12 @@ jobs:
           set -euo pipefail
           result=$(mktemp)
           controller_id=
+          sandbox_name=opencode-repl-tools-demo-sandbox
+          proxy_name=opencode-repl-tools-demo-proxy
           cleanup() {
-            docker logs opencode-repl-tools-demo-sandbox 2>/dev/null || true
-            docker rm --force opencode-repl-tools-demo-sandbox >/dev/null 2>&1 || true
+            docker logs "$sandbox_name" 2>/dev/null || true
+            docker logs "$proxy_name" 2>/dev/null || true
+            docker rm --force "$sandbox_name" "$proxy_name" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
               docker logs "$controller_id" 2>/dev/null || true
               docker rm --force "$controller_id" >/dev/null 2>&1 || true
@@ -151,7 +154,11 @@ jobs:
           }
           trap cleanup EXIT
 
-          devcontainer up --workspace-folder "$PWD" --remove-existing-container >"$result"
+          devcontainer up \
+            --workspace-folder "$PWD" \
+            --remove-existing-container \
+            --skip-post-attach \
+            >"$result"
           controller_id=$(jq -r '.containerId' "$result")
           test -n "$controller_id"
           test "$controller_id" != null
@@ -170,6 +177,14 @@ jobs:
 
           docker exec "$controller_id" curl --fail --silent --show-error \
             http://127.0.0.1:7681/ >/dev/null
-          docker inspect --format '{{.State.Running}}' opencode-repl-tools-demo-sandbox | grep -qx true
+          docker inspect --format '{{.State.Running}}' "$sandbox_name" | grep -qx true
+          docker inspect --format '{{.State.Running}}' "$proxy_name" | grep -qx true
           docker exec "$controller_id" sh -ceu \
             'ss -lnt | grep -Eq "[[:space:]]0\.0\.0\.0:7681[[:space:]]"'
+
+          test "$(docker inspect --format '{{.Config.User}}' "$proxy_name")" = "65534:65534"
+          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$proxy_name")" = true
+          test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$proxy_name")" = false
+          docker inspect --format '{{json .HostConfig.CapDrop}}' "$proxy_name" | grep -Eq '"ALL"'
+          docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$proxy_name" | grep -Eq 'no-new-privileges'
+          test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$proxy_name")" = null

@@ -14,7 +14,6 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "remoteUser": "root",
-  "overrideCommand": false,
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
@@ -23,5 +22,6 @@
       "onAutoForward": "silent"
     }
   },
+  "postStartCommand": "/usr/local/bin/start-demo-sandbox",
   "postAttachCommand": "/usr/local/bin/publish-demo"
 }

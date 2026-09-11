@@ -7,5 +7,3 @@ RUN apt-get update \
 COPY --chmod=0755 .devcontainer/run-demo-sandbox.sh /usr/local/bin/run-demo-sandbox
 COPY --chmod=0755 .devcontainer/start-demo-sandbox.sh /usr/local/bin/start-demo-sandbox
 COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
-
-CMD ["/usr/local/bin/start-demo-sandbox"]
