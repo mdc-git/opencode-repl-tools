@@ -6,7 +6,7 @@ The plugin runs trusted local code on Linux. It is not a sandbox.
 
 ## Browser demo
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools/tree/demo?quickstart=1)
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools?quickstart=1)
 
 The demo launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
 
@@ -32,7 +32,7 @@ If the browser terminal does not start, inspect:
 cat "$HOME/.cache/opencode-repl-tools-preview.log"
 ```
 
-The demo image is built by `.github/workflows/build-demo-image.yml`. BuildKit cache keeps its independent toolchain and dependency stages reusable. The image smoke test also verifies that the public demo identity cannot read the real source checkout or modify the shared runtime. A Codespaces prebuild can additionally snapshot the ready image for the `demo` branch if minimum cold-start latency is required.
+The demo image is built by `.github/workflows/build-demo-image.yml`. BuildKit cache keeps its independent toolchain and dependency stages reusable. The image smoke test also verifies that the public demo identity cannot read the real source checkout or modify the shared runtime. A Codespaces prebuild can additionally snapshot the ready image for the repository's default branch when minimum cold-start latency is required.
 
 ## Requirements
 
