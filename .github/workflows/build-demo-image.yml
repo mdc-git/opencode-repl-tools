@@ -172,6 +172,8 @@ jobs:
           set -euo pipefail
           sandbox="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
           controller="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
+          layer_dir="$(mktemp -d)"
+          trap 'rm -rf "$layer_dir"' EXIT
 
           docker run --rm "$controller" sh -ceu '
             docker --version
@@ -183,10 +185,13 @@ jobs:
             test -x /usr/local/bin/publish-demo
           '
 
-          sandbox_layers="$(docker inspect --format '{{json .RootFS.Layers}}' "$sandbox")"
-          controller_layers="$(docker inspect --format '{{json .RootFS.Layers}}' "$controller")"
-          jq -e --argjson sandbox "$sandbox_layers" --argjson controller "$controller_layers" \
-            '$controller[0:($sandbox | length)] == $sandbox' >/dev/null
+          docker inspect --format '{{range .RootFS.Layers}}{{println .}}{{end}}' "$sandbox" \
+            >"$layer_dir/sandbox"
+          docker inspect --format '{{range .RootFS.Layers}}{{println .}}{{end}}' "$controller" \
+            >"$layer_dir/controller"
+          sandbox_layer_count="$(wc -l <"$layer_dir/sandbox")"
+          head -n "$sandbox_layer_count" "$layer_dir/controller" >"$layer_dir/controller-prefix"
+          cmp "$layer_dir/sandbox" "$layer_dir/controller-prefix"
 
           printf 'sandbox image bytes:   %s\n' "$(docker inspect --format '{{.Size}}' "$sandbox")"
           printf 'controller image bytes: %s\n' "$(docker inspect --format '{{.Size}}' "$controller")"
