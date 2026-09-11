@@ -74,6 +74,26 @@ jobs:
 
           curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null
 
+          docker exec "$name" sh -ceu '
+            export HOME=/home/opencode-demo
+            export TMUX_TMPDIR=$HOME/tmux
+            export PATH=/usr/local/bin:/usr/bin:/bin
+
+            tmux new-session -d -s opencode-smoke /bin/sh
+            tmux set-option -w -t opencode-smoke remain-on-exit on
+            tmux respawn-pane -k -t opencode-smoke /usr/local/bin/run-demo-session
+            sleep 5
+
+            if [ "$(tmux display-message -p -t opencode-smoke "#{pane_dead}")" = 1 ]; then
+              echo "OpenCode demo session exited during startup" >&2
+              tmux capture-pane -p -S -200 -t opencode-smoke >&2 || true
+              exit 1
+            fi
+
+            tmux kill-session -t opencode-smoke
+            rm -rf "$HOME/session" "$HOME/.session.lock"
+          '
+
           test "$(docker inspect --format '{{.Config.User}}' "$name")" = "1001:1001"
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$name")" = true
           test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$name")" = false
