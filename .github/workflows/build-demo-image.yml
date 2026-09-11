@@ -1,4 +1,4 @@
-name: Build demo image
+name: Build demo images
 
 on:
   push:
@@ -22,7 +22,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: demo-image-${{ github.ref }}
+  group: demo-images-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -40,7 +40,8 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/build-push-action@v6
+      - name: Build sandbox image
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: .devcontainer/Dockerfile
@@ -49,9 +50,36 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo
           build-args: |
             OPENCODE_BETA_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=sandbox
+          cache-to: type=gha,mode=max,scope=sandbox
           provenance: false
+
+      - name: Build controller image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .devcontainer/controller.Dockerfile
+          load: true
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller
+          cache-from: type=gha,scope=controller
+          cache-to: type=gha,mode=max,scope=controller
+          provenance: false
+
+      - name: Smoke test controller image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
+          docker run --rm "$image" sh -ceu '
+            docker --version
+            gh --version
+            git --version
+            curl --version >/dev/null
+            test -x /usr/local/bin/run-demo-sandbox
+            test -x /usr/local/bin/start-demo-sandbox
+            test -x /usr/local/bin/publish-demo
+          '
 
       - name: Smoke test sandbox image
         shell: bash
@@ -148,9 +176,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish validated image
+      - name: Publish validated images
         shell: bash
-        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+        run: |
+          set -euo pipefail
+          docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+          docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
 
       - name: Install Codespaces Dev Container CLI version
         shell: bash
