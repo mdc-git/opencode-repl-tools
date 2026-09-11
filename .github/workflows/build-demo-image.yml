@@ -45,7 +45,7 @@ jobs:
       - name: Smoke test browser terminal image
         shell: bash
         run: |
-          set -euxo pipefail
+          set -euo pipefail
           image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
           source_dir="$(mktemp -d)"
           cp -a "$PWD/." "$source_dir/"
@@ -98,7 +98,7 @@ jobs:
             runuser -u opencode-demo -- test ! -w /opt/opencode-repl-cache
 
           docker exec opencode-repl-tools-demo-smoke \
-            sh -ceux '
+            sh -ceu '
               test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
               test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
 
@@ -109,7 +109,10 @@ jobs:
 
               ttyd_pid=
               for proc in /proc/[0-9]*; do
-                if [ "$(readlink "$proc/exe" 2>/dev/null || true)" = /usr/local/bin/ttyd ]; then
+                status="$proc/status"
+                if [ -r "$status" ] \
+                  && grep -Eq "^Name:[[:space:]]+ttyd$" "$status" \
+                  && grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" "$status"; then
                   ttyd_pid=${proc##*/}
                   break
                 fi
