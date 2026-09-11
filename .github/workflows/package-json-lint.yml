@@ -133,20 +133,29 @@ jobs:
       - name: Fail if any check failed
         if: always()
         run: |
-          for outcome in \
-            "${{ steps.opencode.outcome }}" \
-            "${{ steps.format.outcome }}" \
-            "${{ steps.lint.outcome }}" \
-            "${{ steps.typecheck.outcome }}" \
-            "${{ steps.workers.outcome }}" \
-            "${{ steps.deps.outcome }}" \
-            "${{ steps.knip.outcome }}" \
-            "${{ steps.audit.outcome }}" \
-            "${{ steps.pack.outcome }}" \
-            "${{ steps.updates.outcome }}" \
-            "${{ steps.dependabot.outcome }}"
-          do
+          failed=0
+
+          check() {
+            name="$1"
+            outcome="$2"
+            printf '%-32s %s\n' "$name" "$outcome"
+
             if [ "$outcome" != "success" ]; then
-              exit 1
+              echo "::error title=Check failed::$name: $outcome"
+              failed=1
             fi
-          done
+          }
+
+          check "OpenCode dependency channel" "${{ steps.opencode.outcome }}"
+          check "Formatting" "${{ steps.format.outcome }}"
+          check "Lint" "${{ steps.lint.outcome }}"
+          check "Typecheck" "${{ steps.typecheck.outcome }}"
+          check "Workers" "${{ steps.workers.outcome }}"
+          check "Dependency architecture" "${{ steps.deps.outcome }}"
+          check "Unused code/dependencies" "${{ steps.knip.outcome }}"
+          check "Bun audit" "${{ steps.audit.outcome }}"
+          check "Package contents" "${{ steps.pack.outcome }}"
+          check "Dependency update scan" "${{ steps.updates.outcome }}"
+          check "Dependabot alerts" "${{ steps.dependabot.outcome }}"
+
+          exit "$failed"
