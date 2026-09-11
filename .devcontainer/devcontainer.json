@@ -19,9 +19,8 @@
     "7681": {
       "label": "OpenCode TUI",
       "protocol": "http",
-      "onAutoForward": "openBrowserOnce"
+      "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "/usr/local/bin/start-demo-sandbox",
-  "postAttachCommand": "/usr/local/bin/publish-demo"
+  "postStartCommand": "/usr/local/bin/start-demo-sandbox && /usr/local/bin/publish-demo"
 }
