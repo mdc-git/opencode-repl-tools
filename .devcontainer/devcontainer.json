@@ -1,20 +1,11 @@
 {
   "name": "OpenCode REPL Tools Demo Controller",
-  "build": {
-    "dockerfile": "controller.Dockerfile",
-    "context": ".."
-  },
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "moby": true,
-      "installDockerBuildx": false,
-      "dockerDashComposeVersion": "none",
-      "installDockerComposeSwitch": false
-    },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
-  },
+  "image": "ghcr.io/mdc-git/opencode-repl-tools-demo:controller",
   "remoteUser": "root",
   "runArgs": ["--network=host"],
+  "mounts": [
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
