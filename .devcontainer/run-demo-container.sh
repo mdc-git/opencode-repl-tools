@@ -4,6 +4,8 @@ set -euo pipefail
 DEMO_USER=opencode-demo
 DEMO_UID=$(id -u "$DEMO_USER")
 DEMO_GID=$(id -g "$DEMO_USER")
+DEMO_HOME=/home/opencode-demo
+TMUX_TMPDIR=$DEMO_HOME/tmux
 DEMO_SOURCE=/opt/opencode-demo/source
 SOURCE=${OPENCODE_DEMO_SOURCE:-/workspaces/${RepositoryName:-opencode-repl-tools}}
 LOG=/root/.cache/opencode-repl-tools-preview.log
@@ -11,6 +13,7 @@ PORT=7681
 
 mkdir -p "$(dirname "$LOG")"
 : >"$LOG"
+install -d -m 0700 -o "$DEMO_UID" -g "$DEMO_GID" "$TMUX_TMPDIR"
 
 for dir in /tmp /var/tmp /dev/shm; do
   if [[ -d "$dir" ]]; then
@@ -49,7 +52,8 @@ while true; do
     --bounding-set=-all \
     --no-new-privs \
     env -i \
-      HOME=/home/opencode-demo \
+      HOME="$DEMO_HOME" \
+      TMUX_TMPDIR="$TMUX_TMPDIR" \
       USER="$DEMO_USER" \
       LOGNAME="$DEMO_USER" \
       SHELL=/bin/bash \
@@ -72,8 +76,8 @@ while true; do
     --inh-caps=-all \
     --bounding-set=-all \
     --no-new-privs \
-    /usr/bin/tmux kill-server >/dev/null 2>&1 || true
-  rm -rf /home/opencode-demo/session
+    env TMUX_TMPDIR="$TMUX_TMPDIR" /usr/bin/tmux kill-server >/dev/null 2>&1 || true
+  rm -rf "$DEMO_HOME/session"
 
   echo "ttyd exited; restarting with a fresh demo session" >>"$LOG"
   sleep 1
