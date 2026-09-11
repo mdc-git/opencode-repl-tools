@@ -4,137 +4,79 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: '17 4 * * *'
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: repository-checks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.2
 
-      - name: Install dependencies
-        run: bun install
-
-      # Direct pushes to master are normalized before validation. Each fixer is
-      # allowed to leave unfixable findings behind; the read-only checks below
-      # report and fail on whatever remains.
-      - name: Fix dependency vulnerabilities
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        run: bun audit fix
-
-      - name: Fix unused code and dependencies
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        run: bunx --bun knip --fix
-
-      - name: Fix lint findings
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        run: bunx --bun eslint . --fix
-
-      - name: Format repository
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        run: bun run format
-
-      - name: Commit automatic fixes
-        if: github.event_name != 'pull_request'
+      - name: Prepare
         run: |
-          if git diff --quiet -- .; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            bun install --frozen-lockfile
             exit 0
           fi
+
+          node scripts/update-direct-deps.mjs --apply
+          bun install
+          bun audit fix || true
+          bunx --bun knip --fix || true
+          bunx --bun eslint . --fix || true
+          bun run format
+          bun install
+
+      - name: Validate
+        run: |
+          node -e "
+          const pkg = require('./package.json')
+          if (pkg.dependencies?.['@opencode/plugin'] !== 'beta') {
+            throw new Error('@opencode/plugin must remain exactly beta')
+          }
+          "
+
+          bun run format:check
+          bun run lint
+          bun run typecheck
+          bun run check:workers
+          bun run check:deps
+          bun run check:knip
+          bun run audit
+          bun pm pack --dry-run
+
+      - name: Commit validated updates
+        if: github.event_name != 'pull_request'
+        run: |
+          if git diff --quiet && [ -z "$(git ls-files --others --exclude-standard)" ]; then
+            exit 0
+          fi
+
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add -u
-          git commit -m "style: apply automatic repository fixes"
+          git add -A
+          git commit -m "chore(deps): refresh validated dependency graph
+
+          Resolve compatible direct dependency updates while keeping
+          @opencode/plugin on the rolling beta channel.
+
+          Apply available security and repository fixes and commit only
+          after the complete repository validation suite succeeds."
           git push
-
-      - name: Refresh dependencies after fixes
-        if: github.event_name != 'pull_request'
-        run: bun install
-
-      - name: Check formatting
-        id: format
-        continue-on-error: true
-        run: bun run format:check
-
-      - name: Lint
-        id: lint
-        continue-on-error: true
-        run: bun run lint
-
-      - name: Typecheck
-        id: typecheck
-        continue-on-error: true
-        run: bun run typecheck
-
-      - name: Check workers
-        id: workers
-        continue-on-error: true
-        run: bun run check:workers
-
-      - name: Check dependency architecture
-        id: deps
-        continue-on-error: true
-        run: bun run check:deps
-
-      - name: Check unused code and dependencies
-        id: knip
-        continue-on-error: true
-        run: bun run check:knip
-
-      - name: Audit dependencies
-        id: audit
-        continue-on-error: true
-        run: bun run audit
-
-      - name: Pack package
-        id: pack
-        continue-on-error: true
-        run: bun pm pack
-
-      - name: Fail if any validation gate failed
-        if: always()
-        env:
-          FORMAT_OUTCOME: ${{ steps.format.outcome }}
-          LINT_OUTCOME: ${{ steps.lint.outcome }}
-          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
-          WORKERS_OUTCOME: ${{ steps.workers.outcome }}
-          DEPS_OUTCOME: ${{ steps.deps.outcome }}
-          KNIP_OUTCOME: ${{ steps.knip.outcome }}
-          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
-          PACK_OUTCOME: ${{ steps.pack.outcome }}
-        run: |
-          printf '%s\n' \
-            "format=$FORMAT_OUTCOME" \
-            "lint=$LINT_OUTCOME" \
-            "typecheck=$TYPECHECK_OUTCOME" \
-            "workers=$WORKERS_OUTCOME" \
-            "deps=$DEPS_OUTCOME" \
-            "knip=$KNIP_OUTCOME" \
-            "audit=$AUDIT_OUTCOME" \
-            "pack=$PACK_OUTCOME"
-          for outcome in \
-            "$FORMAT_OUTCOME" \
-            "$LINT_OUTCOME" \
-            "$TYPECHECK_OUTCOME" \
-            "$WORKERS_OUTCOME" \
-            "$DEPS_OUTCOME" \
-            "$KNIP_OUTCOME" \
-            "$AUDIT_OUTCOME" \
-            "$PACK_OUTCOME"
-          do
-            if [ "$outcome" != "success" ]; then
-              exit 1
-            fi
-          done
