@@ -56,7 +56,7 @@ COPY plugins/repl/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     set -eux; \
     requirements_sha="$(sha256sum /tmp/requirements.txt | cut -d' ' -f1)"; \
-    python_version="$(python3 -c 'import sys; print(f"${sys.version_info.major}.${sys.version_info.minor}")')"; \
+    python_version="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"; \
     venv="/opt/opencode-repl-cache/opencode/repl-tools/python/${python_version}/${requirements_sha}/venv"; \
     python3 -m venv "$venv"; \
     "$venv/bin/pip" install --disable-pip-version-check --no-compile -r /tmp/requirements.txt; \
