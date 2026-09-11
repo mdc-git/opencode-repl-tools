@@ -2,7 +2,7 @@ name: Build demo image
 
 on:
   push:
-    branches: [demo]
+    branches: [master]
     paths:
       - .devcontainer/Dockerfile
       - .devcontainer/run-demo-container.sh
