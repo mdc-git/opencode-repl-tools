@@ -3,9 +3,7 @@
   "image": "ghcr.io/mdc-git/opencode-repl-tools-demo:controller",
   "remoteUser": "root",
   "runArgs": ["--network=host"],
-  "mounts": [
-    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-  ],
+  "mounts": ["source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"],
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
