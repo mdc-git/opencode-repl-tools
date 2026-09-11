@@ -31,8 +31,7 @@ function nextSpecifier(current, latest) {
 
 for (const section of sections) {
   for (const [name, current] of Object.entries(pkg[section] ?? {})) {
-    const next =
-      name === protectedPackage ? 'beta' : nextSpecifier(current, latestVersion(name))
+    const next = name === protectedPackage ? 'beta' : nextSpecifier(current, latestVersion(name))
 
     if (next === current) {
       continue
