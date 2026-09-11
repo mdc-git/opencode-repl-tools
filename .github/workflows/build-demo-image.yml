@@ -59,7 +59,7 @@ jobs:
             --publish 127.0.0.1:7681:7681 \
             --volume "$source_dir:/workspaces/opencode-repl-tools" \
             "$image"
-          trap 'docker logs opencode-repl-tools-demo-smoke || true; docker rm --force opencode-repl-tools-demo-smoke >/dev/null 2>&1 || true; chmod -R u+rwX "$source_dir" 2>/dev/null || true; rm -rf "$source_dir"' EXIT
+          trap 'docker logs opencode-repl-tools-demo-smoke || true; docker exec opencode-repl-tools-demo-smoke cat /root/.cache/opencode-repl-tools-preview.log 2>/dev/null || true; docker rm --force opencode-repl-tools-demo-smoke >/dev/null 2>&1 || true; chmod -R u+rwX "$source_dir" 2>/dev/null || true; rm -rf "$source_dir"' EXIT
 
           for _ in $(seq 1 100); do
             if curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null; then
