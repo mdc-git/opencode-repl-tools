@@ -54,33 +54,6 @@ jobs:
           cache-to: type=gha,mode=max,scope=sandbox
           provenance: false
 
-      - name: Build controller image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: .devcontainer/controller.Dockerfile
-          load: true
-          push: false
-          tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller
-          cache-from: type=gha,scope=controller
-          cache-to: type=gha,mode=max,scope=controller
-          provenance: false
-
-      - name: Smoke test controller image
-        shell: bash
-        run: |
-          set -euo pipefail
-          image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
-          docker run --rm "$image" sh -ceu '
-            docker --version
-            gh --version
-            git --version
-            curl --version >/dev/null
-            test -x /usr/local/bin/run-demo-sandbox
-            test -x /usr/local/bin/start-demo-sandbox
-            test -x /usr/local/bin/publish-demo
-          '
-
       - name: Smoke test sandbox image
         shell: bash
         run: |
@@ -176,12 +149,51 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish validated images
+      - name: Publish validated sandbox image
+        shell: bash
+        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+
+      - name: Build controller image from validated sandbox
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .devcontainer/controller.Dockerfile
+          pull: true
+          load: true
+          push: false
+          tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller
+          cache-from: type=gha,scope=controller
+          cache-to: type=gha,mode=max,scope=controller
+          provenance: false
+
+      - name: Smoke test controller image
         shell: bash
         run: |
           set -euo pipefail
-          docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
-          docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
+          sandbox="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+          controller="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
+
+          docker run --rm "$controller" sh -ceu '
+            docker --version
+            gh --version
+            git --version
+            curl --version >/dev/null
+            test -x /usr/local/bin/run-demo-sandbox
+            test -x /usr/local/bin/start-demo-sandbox
+            test -x /usr/local/bin/publish-demo
+          '
+
+          sandbox_layers="$(docker inspect --format '{{json .RootFS.Layers}}' "$sandbox")"
+          controller_layers="$(docker inspect --format '{{json .RootFS.Layers}}' "$controller")"
+          jq -e --argjson sandbox "$sandbox_layers" --argjson controller "$controller_layers" \
+            '$controller[0:($sandbox | length)] == $sandbox' >/dev/null
+
+          printf 'sandbox image bytes:   %s\n' "$(docker inspect --format '{{.Size}}' "$sandbox")"
+          printf 'controller image bytes: %s\n' "$(docker inspect --format '{{.Size}}' "$controller")"
+
+      - name: Publish validated controller image
+        shell: bash
+        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
 
       - name: Install Codespaces Dev Container CLI version
         shell: bash
@@ -215,6 +227,8 @@ jobs:
           test "$controller_id" != null
 
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$controller_id")" = host
+          test -S /var/run/docker.sock
+          docker exec "$controller_id" test -S /var/run/docker.sock
 
           for _ in $(seq 1 300); do
             if docker exec "$controller_id" curl --fail --silent --show-error \
