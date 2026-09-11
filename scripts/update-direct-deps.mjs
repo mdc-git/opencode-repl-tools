@@ -82,7 +82,7 @@ function npmResolvedVersion(lock, name) {
   const version = lock.packages?.[`node_modules/${name}`]?.version
 
   if (typeof version !== 'string') {
-    throw new Error(`No root npm resolution found for ${name}`)
+    throw new TypeError(`No root npm resolution found for ${name}`)
   }
 
   return version
