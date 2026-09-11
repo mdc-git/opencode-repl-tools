@@ -45,7 +45,7 @@ jobs:
       - name: Smoke test browser terminal image
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
           source_dir="$(mktemp -d)"
           cp -a "$PWD/." "$source_dir/"
