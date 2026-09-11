@@ -20,7 +20,7 @@ docker run --detach \
   --ulimit core=0:0 \
   --ulimit nofile=256:256 \
   --ulimit nproc=128:128 \
-  --tmpfs /home/opencode-demo:rw,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
+  --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=1001,gid=1001,mode=0700 \
   --network bridge \
   --publish "${PUBLISH}:7681" \
