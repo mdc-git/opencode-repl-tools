@@ -1,11 +1,15 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_IMAGE=node:26.8.2-bookworm-slim
+ARG BUN_IMAGE=oven/bun:1
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
 ARG OPENCODE_BETA_CACHE_KEY=local
 
 FROM ${NODE_IMAGE} AS node-runtime
+
+FROM ${BUN_IMAGE} AS bun-runtime
+USER root
 
 FROM node-runtime AS tooling-base
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -25,23 +29,27 @@ RUN set -eux; \
     grep ' ttyd.x86_64$' /tmp/ttyd-checksums | sed 's#ttyd.x86_64#/tmp/ttyd#' | sha256sum -c -; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
 
-FROM node-runtime AS opencode-tooling
+FROM bun-runtime AS opencode-tooling
 ARG OPENCODE_BETA_CACHE_KEY
-RUN --mount=type=cache,target=/root/.npm \
+ENV BUN_INSTALL=/opt/opencode-install \
+    PATH=/opt/opencode-install/bin:/usr/local/bin:/usr/bin:/bin
+RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
     test -n "$OPENCODE_BETA_CACHE_KEY"; \
-    npm install --global --prefix /opt/opencode --no-audit --no-fund "@opencode/cli@beta"; \
-    test -x /opt/opencode/bin/opencode2; \
+    bun install --global --trust "@opencode/cli@beta"; \
+    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
+    test -x "$opencode_path"; \
+    install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
     /opt/opencode/bin/opencode2 --version
 
-FROM node-runtime AS node-dependencies
+FROM bun-runtime AS node-dependencies
 ARG OPENCODE_BETA_CACHE_KEY
 WORKDIR /opt/opencode-repl-tools
-COPY package.json ./
-RUN --mount=type=cache,target=/root/.npm \
+COPY package.json bun.lock ./
+RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
     test -n "$OPENCODE_BETA_CACHE_KEY"; \
-    npm install --omit=dev --ignore-scripts --package-lock=false --no-audit --no-fund
+    bun install --production --frozen-lockfile --ignore-scripts
 
 FROM tooling-base AS python-dependencies
 COPY plugins/repl/requirements.txt /tmp/requirements.txt
@@ -77,7 +85,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 FROM runtime-base AS final
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
-COPY --from=opencode-tooling /opt/opencode/ /opt/opencode/
+COPY --from=opencode-tooling /opt/opencode/bin/opencode2 /opt/opencode/bin/opencode2
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
