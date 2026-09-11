@@ -3,7 +3,7 @@
 ARG NODE_IMAGE=node:26.8.2-bookworm-slim
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
-ARG OPENCODE_CACHE_KEY=2026-09-10
+ARG OPENCODE_VERSION=0.0.0-beta-19271
 
 FROM ${NODE_IMAGE} AS node-runtime
 
@@ -25,14 +25,13 @@ RUN set -eux; \
     grep ' ttyd.x86_64$' /tmp/ttyd-checksums | sed 's#ttyd.x86_64#/tmp/ttyd#' | sha256sum -c -; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
 
-FROM tooling-base AS opencode-tooling
-ARG OPENCODE_CACHE_KEY
-USER opencode-demo
-RUN set -eux; \
-    test -n "${OPENCODE_CACHE_KEY}"; \
-    curl -fsSL https://opencode.ai/v2/install | bash; \
-    test -x /home/opencode-demo/.opencode/bin/opencode2
-USER root
+FROM node-runtime AS opencode-tooling
+ARG OPENCODE_VERSION
+RUN --mount=type=cache,target=/root/.npm \
+    set -eux; \
+    npm install --global --prefix /opt/opencode --no-audit --no-fund "@opencode-ai/cli@${OPENCODE_VERSION}"; \
+    test -x /opt/opencode/bin/opencode2; \
+    /opt/opencode/bin/opencode2 --version
 
 FROM node-runtime AS node-dependencies
 WORKDIR /opt/opencode-repl-tools
@@ -74,7 +73,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 FROM runtime-base AS final
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
-COPY --chown=0:0 --from=opencode-tooling /home/opencode-demo/.opencode/ /opt/opencode/
+COPY --from=opencode-tooling /opt/opencode/ /opt/opencode/
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
