@@ -6,9 +6,13 @@ on:
     paths:
       - .dockerignore
       - .devcontainer/Dockerfile
+      - .devcontainer/controller.Dockerfile
+      - .devcontainer/devcontainer.json
       - .devcontainer/run-demo-container.sh
       - .devcontainer/run-demo-session.sh
       - .devcontainer/run-demo-sandbox.sh
+      - .devcontainer/start-demo-sandbox.sh
+      - .devcontainer/publish-demo.sh
       - package.json
       - bun.lock
       - README.md
@@ -82,7 +86,8 @@ jobs:
           docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name" | grep -Eq 'no-new-privileges'
           test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$name")" = null
 
-          if docker inspect --format '{{json .Config.Env}}' "$name"                 | grep -Eq '(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)='; then
+          if docker inspect --format '{{json .Config.Env}}' "$name" \
+              | grep -Eq '(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)='; then
             echo 'GitHub credential variable configured in public sandbox' >&2
             exit 1
           fi
@@ -108,7 +113,8 @@ jobs:
               grep -Eq "^${field}:[[:space:]]+0+$" /proc/1/status
             done
 
-            if tr "\000" "\n" </proc/1/environ                   | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
+            if tr "\000" "\n" </proc/1/environ \
+                | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
               echo "GitHub credential leaked into public sandbox process" >&2
               exit 1
             fi
@@ -123,3 +129,47 @@ jobs:
       - name: Publish validated image
         shell: bash
         run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
+
+      - name: Install Dev Container CLI
+        shell: bash
+        run: npm install --global @devcontainers/cli@0.89.0
+
+      - name: Smoke test Codespaces controller
+        shell: bash
+        run: |
+          set -euo pipefail
+          result=$(mktemp)
+          controller_id=
+          cleanup() {
+            docker logs opencode-repl-tools-demo-sandbox 2>/dev/null || true
+            docker rm --force opencode-repl-tools-demo-sandbox >/dev/null 2>&1 || true
+            if [[ -n "$controller_id" ]]; then
+              docker logs "$controller_id" 2>/dev/null || true
+              docker rm --force "$controller_id" >/dev/null 2>&1 || true
+            fi
+            rm -f "$result"
+          }
+          trap cleanup EXIT
+
+          devcontainer up --workspace-folder "$PWD" --remove-existing-container >"$result"
+          controller_id=$(jq -r '.containerId' "$result")
+          test -n "$controller_id"
+          test "$controller_id" != null
+
+          for _ in $(seq 1 300); do
+            if docker exec "$controller_id" curl --fail --silent --show-error \
+                http://127.0.0.1:7681/ >/dev/null 2>&1; then
+              break
+            fi
+            if ! docker inspect --format '{{.State.Running}}' "$controller_id" | grep -qx true; then
+              echo 'demo controller exited before port 7681 became ready' >&2
+              exit 1
+            fi
+            sleep 0.1
+          done
+
+          docker exec "$controller_id" curl --fail --silent --show-error \
+            http://127.0.0.1:7681/ >/dev/null
+          docker inspect --format '{{.State.Running}}' opencode-repl-tools-demo-sandbox | grep -qx true
+          docker exec "$controller_id" sh -ceu \
+            'ss -lnt | grep -Eq "[[:space:]]0\.0\.0\.0:7681[[:space:]]"'
