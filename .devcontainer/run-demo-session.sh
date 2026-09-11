@@ -9,6 +9,8 @@ TMPDIR=$SESSION_HOME/tmp
 DEMO_SOURCE=/opt/opencode-demo/source
 PYTHON_CACHE=/opt/opencode-repl-cache/opencode/repl-tools/python
 
+umask 077
+
 exec 9>"$DEMO_HOME/.session.lock"
 if ! flock -n 9; then
   echo 'A previous demo session is still shutting down. Reconnect in a moment.' >&2
@@ -16,13 +18,12 @@ if ! flock -n 9; then
 fi
 
 rm -rf "$SESSION_ROOT"
-install -d -m 0700 "$SESSION_HOME" "$TMPDIR"
-install -d -m 0755 "$WORKSPACE"
+install -d -m 0700 "$SESSION_HOME" "$TMPDIR" "$WORKSPACE"
 cp -a "$DEMO_SOURCE/." "$WORKSPACE/"
-chmod -R u+rwX "$WORKSPACE"
+chmod -R u+rwX,go-rwx "$WORKSPACE"
 ln -s /opt/opencode-repl-tools/node_modules "$WORKSPACE/node_modules"
 
-install -d -m 0755 "$SESSION_HOME/.cache/opencode/repl-tools"
+install -d -m 0700 "$SESSION_HOME/.cache/opencode/repl-tools"
 ln -s "$PYTHON_CACHE" "$SESSION_HOME/.cache/opencode/repl-tools/python"
 
 cd "$WORKSPACE"
