@@ -67,12 +67,17 @@ function resolveCompatibleGraph(manifest) {
   }
 }
 
-function bunResolvedVersion(lock, name) {
+function rootBunResolution(lock, name) {
   const resolution = lock.packages?.[name]?.[0]
   if (typeof resolution !== 'string') {
     throw new TypeError(`No root Bun resolution found for ${name}`)
   }
 
+  return resolution
+}
+
+function bunResolvedVersion(lock, name) {
+  const resolution = rootBunResolution(lock, name)
   const prefix = `${name}@`
   if (!resolution.startsWith(prefix)) {
     throw new Error(`Unexpected root Bun resolution for ${name}: ${resolution}`)
@@ -113,15 +118,26 @@ function widenSection(manifest, section, baseline) {
   }
 }
 
+function resolvedSpecifier(name, current, upgrade) {
+  if (name === protectedPackage) {
+    return 'beta'
+  }
+
+  return nextSpecifier(current, npmResolvedVersion(upgrade, name))
+}
+
+function dependencyChange(section, name, current, upgrade) {
+  const next = resolvedSpecifier(name, current, upgrade)
+  return next === current ? undefined : { section, name, current, next }
+}
+
 function sectionChanges(manifest, section, upgrade) {
-  const changes = []
-  for (const [name, current] of Object.entries(manifest[section] ?? {})) {
-    const next =
-      name === protectedPackage ? 'beta' : nextSpecifier(current, npmResolvedVersion(upgrade, name))
-    if (next !== current) {
-      changes.push({ section, name, current, next })
-      manifest[section][name] = next
-    }
+  const changes = Object.entries(manifest[section] ?? {})
+    .map(([name, current]) => dependencyChange(section, name, current, upgrade))
+    .filter((change) => change !== undefined)
+
+  for (const change of changes) {
+    manifest[section][change.name] = change.next
   }
 
   return changes

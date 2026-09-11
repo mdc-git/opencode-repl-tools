@@ -37,11 +37,7 @@ function imageMimeType(value) {
   return mime
 }
 
-function imageName(value) {
-  if (value === undefined) {
-    return undefined
-  }
-
+function requiredImageName(value) {
   if (typeof value !== 'string') {
     throw new TypeError('opencode.emitImage filename must be a non-empty string')
   }
@@ -51,7 +47,15 @@ function imageName(value) {
     throw new TypeError('opencode.emitImage filename must be a non-empty string')
   }
 
-  const name = path.basename(trimmed).replaceAll(/[^\w\-.]/gv, '_').slice(0, 255)
+  return trimmed
+}
+
+function imageName(value) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const name = path.basename(requiredImageName(value)).replaceAll(/[^\w.-]/gv, '_').slice(0, 255)
   if (name.length === 0) {
     throw new TypeError('opencode.emitImage filename must contain a valid filename')
   }
@@ -71,7 +75,7 @@ function imageInput(value) {
   return value
 }
 
-function nextImageBytes(currentBytes, imageCount, bytes) {
+function validateImageSize(bytes) {
   if (bytes.byteLength === 0) {
     throw new Error('opencode.emitImage expected non-empty image bytes')
   }
@@ -79,13 +83,19 @@ function nextImageBytes(currentBytes, imageCount, bytes) {
   if (bytes.byteLength > MAX_IMAGE_BYTES) {
     throw new Error(`opencode.emitImage image exceeds the ${MAX_IMAGE_BYTES}-byte limit`)
   }
+}
 
+function validateImageCount(imageCount) {
   if (imageCount >= MAX_IMAGES_PER_EVALUATION) {
     throw new Error(
       `opencode.emitImage supports at most ${MAX_IMAGES_PER_EVALUATION} images per evaluation`
     )
   }
+}
 
+function nextImageBytes(currentBytes, imageCount, bytes) {
+  validateImageSize(bytes)
+  validateImageCount(imageCount)
   const nextBytes = currentBytes + bytes.byteLength
   if (nextBytes > MAX_TOTAL_IMAGE_BYTES) {
     throw new Error(
