@@ -70,12 +70,53 @@ jobs:
           done
 
           curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null
+
           docker exec opencode-repl-tools-demo-smoke \
             runuser -u opencode-demo -- test ! -r /workspaces/opencode-repl-tools/package.json
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -r /root
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -x /usr/local/bin/gh
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -x /usr/local/bin/publish-demo
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -x /usr/local/bin/run-demo-container
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -w /tmp
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -w /var/tmp
+          docker exec opencode-repl-tools-demo-smoke \
+            runuser -u opencode-demo -- test ! -w /dev/shm
           docker exec opencode-repl-tools-demo-smoke \
             runuser -u opencode-demo -- test ! -w /opt/opencode/bin/opencode2
           docker exec opencode-repl-tools-demo-smoke \
             runuser -u opencode-demo -- test ! -w /opt/opencode-repl-tools/node_modules
           docker exec opencode-repl-tools-demo-smoke \
             runuser -u opencode-demo -- test ! -w /opt/opencode-repl-cache
+
+          docker exec opencode-repl-tools-demo-smoke \
+            sh -ceu '
+              test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
+              test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
+
+              ttyd_pid=
+              for proc in /proc/[0-9]*; do
+                if [ -r "$proc/cmdline" ] && tr "\000" " " <"$proc/cmdline" | grep -q "/usr/local/bin/ttyd"; then
+                  ttyd_pid=${proc##*/}
+                  break
+                fi
+              done
+              test -n "$ttyd_pid"
+
+              grep -Eq "^NoNewPrivs:[[:space:]]+1$" "/proc/$ttyd_pid/status"
+              for field in CapInh CapPrm CapEff CapBnd CapAmb; do
+                grep -Eq "^${field}:[[:space:]]+0+$" "/proc/$ttyd_pid/status"
+              done
+
+              if tr "\000" "\n" <"/proc/$ttyd_pid/environ" | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
+                echo "GitHub credential leaked into public ttyd environment" >&2
+                exit 1
+              fi
+            '
+
           docker exec opencode-repl-tools-demo-smoke test -x /usr/local/bin/publish-demo
