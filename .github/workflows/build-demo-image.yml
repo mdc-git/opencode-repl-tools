@@ -47,6 +47,8 @@ jobs:
           load: true
           push: false
           tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo
+          build-args: |
+            OPENCODE_BETA_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
