@@ -47,37 +47,37 @@ jobs:
       - name: Check formatting
         id: format
         continue-on-error: true
-        run: bun run format:check
+        run: prettier . --check --config tooling/prettier.json
 
       - name: Lint
         id: lint
         continue-on-error: true
-        run: bun run lint
+        run: eslint . --config tooling/eslint.config.js
 
       - name: Typecheck
         id: typecheck
         continue-on-error: true
-        run: bun run typecheck
+        run: tsc --project tooling/tsconfig.json --noEmit
 
       - name: Check workers
         id: workers
         continue-on-error: true
-        run: bun run check:workers
+        run: node --check plugins/repl/workers/node-repl.mjs && python3 -m py_compile plugins/repl/workers/python-kernel.py && rm -rf plugins/repl/workers/__pycache__
 
       - name: Check dependency architecture
         id: deps
         continue-on-error: true
-        run: bun run check:deps
+        run: depcruise --config tooling/dependency-cruiser.mjs plugins/repl
 
       - name: Check unused code and dependencies
         id: knip
         continue-on-error: true
-        run: bun run check:knip
+        run: knip --config tooling/knip.json --tsConfig tooling/tsconfig.json
 
       - name: Audit dependencies
         id: audit
         continue-on-error: true
-        run: bun run audit
+        run: bun audit
 
       - name: Check package contents
         id: pack
@@ -88,7 +88,7 @@ jobs:
         id: updates
         continue-on-error: true
         run: |
-          output="$(node scripts/update-direct-deps.mjs)"
+          output="$(node tooling/update-direct-deps.mjs)"
           printf '%s\n' "$output"
 
           {

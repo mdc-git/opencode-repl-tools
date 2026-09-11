@@ -1,8 +1,0 @@
-node_modules/
-dist/
-build/
-coverage/
-.opencode/.learning/
-__pycache__/
-*.pyc
-*.zip

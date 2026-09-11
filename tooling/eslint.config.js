@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'eslint/config'
 import eslintConfigXo from 'eslint-config-xo'
 import boundaries from 'eslint-plugin-boundaries'
@@ -5,6 +6,7 @@ import sonarjs from 'eslint-plugin-sonarjs'
 
 const projectFiles = ['**/*.{js,mjs,cjs,ts}']
 const replFiles = ['plugins/repl/**/*.{ts,mjs}']
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
 
 const noFunctionScopedDynamicLoads = [
   ['FunctionDeclaration ImportExpression', 'Dynamic import() is not allowed inside functions'],
@@ -60,7 +62,7 @@ const config = defineConfig([
     space: true,
     semicolon: false,
     prettier: 'compat',
-    gitignore: import.meta.url
+    gitignore: new URL('../.gitignore', import.meta.url).href
   }),
   {
     files: ['**/package.json'],
@@ -94,6 +96,16 @@ const config = defineConfig([
       'max-lines-per-function': ['error', { max: 50, skipBlankLines: true, skipComments: true }],
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       'no-restricted-syntax': ['error', ...noFunctionScopedDynamicLoads]
+    }
+  },
+  {
+    files: ['plugins/repl/**/*.ts'],
+    languageOptions: {
+      parserOptions: {
+        project: './tooling/tsconfig.json',
+        projectService: false,
+        tsconfigRootDir: repositoryRoot
+      }
     }
   },
   {

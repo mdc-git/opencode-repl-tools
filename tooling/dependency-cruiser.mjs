@@ -43,7 +43,6 @@ const config = {
           '^v8/tools/tickprocessor$',
           '^node-inspect/lib/_inspect$',
           '^node-inspect/lib/internal/inspect_client$',
-          '^node-inspect/lib/internal/inspect_repl$',
           '^async_hooks$',
           '^punycode$',
           '^domain$',
@@ -61,7 +60,7 @@ const config = {
     },
     tsPreCompilationDeps: true,
     tsConfig: {
-      fileName: 'tsconfig.json'
+      fileName: 'tooling/tsconfig.json'
     },
     enhancedResolveOptions: {
       exportsFields: ['exports'],

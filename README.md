@@ -170,21 +170,15 @@ local.opencode_repl_tools
 
 ## Development checks
 
-The repository uses Bun for local package management and intentionally does not commit `bun.lock`. Run each validation gate independently from the repository root:
+The repository uses Bun for local package management and commits `bun.lock`. Development tooling is consolidated under `tooling/`; `package.json` exposes two repository-level commands:
 
 ```sh
-bun install
-bun run format:check
-bun run lint
-bun run typecheck
-bun run check:workers
-bun run check:deps
-bun run check:knip
-bun run audit
-bun pm pack
+bun install --frozen-lockfile
+bun run check
+bun run fix
 ```
 
-`bun run format` is the explicit mutating formatter command. There is currently no project test runner or test suite, so the tooling setup does not invent one.
+`bun run check` runs the repository validation gates without stopping at the first failure. `bun run fix` applies compatible direct-dependency updates and every available automatic cleanup, then reruns the full check against the resulting state. There is currently no project test runner or test suite, so the tooling setup does not invent one.
 
 The dependency architecture enforced by ESLint reflects the current implementation: package entry → core/contracts; core → core/contracts/adapters; adapters → adapters/contracts/utils; contracts and utils are inward-only; worker code is isolated. Dependency Cruiser separately treats circular dependencies and deprecated Node core modules as errors and reports orphan modules as warnings.
 

@@ -9,6 +9,6 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["plugins/**/*.ts"],
-  "exclude": [".opencode/**"]
+  "include": ["../plugins/**/*.ts"],
+  "exclude": ["../.opencode/**"]
 }

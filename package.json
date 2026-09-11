@@ -7,8 +7,8 @@
   "exports": "./plugins/repl/index.ts",
   "sideEffects": false,
   "scripts": {
-    "check": "failed=0; node scripts/update-direct-deps.mjs || failed=1; prettier . --check || failed=1; eslint . || failed=1; tsc --noEmit || failed=1; node --check plugins/repl/workers/node-repl.mjs || failed=1; python3 -m py_compile plugins/repl/workers/python-kernel.py || failed=1; rm -rf plugins/repl/workers/__pycache__; depcruise --config .dependency-cruiser.mjs plugins/repl || failed=1; knip || failed=1; bun audit || failed=1; bun pm pack --dry-run || failed=1; exit \"$failed\"",
-    "fix": "failed=0; node scripts/update-direct-deps.mjs --apply || failed=1; bun install || failed=1; bun audit fix || failed=1; knip --fix || failed=1; prettier . --write || failed=1; eslint . --fix || failed=1; bun install || failed=1; bun run check || failed=1; exit \"$failed\""
+    "check": "failed=0; node tooling/update-direct-deps.mjs || failed=1; prettier . --check --config tooling/prettier.json || failed=1; eslint . --config tooling/eslint.config.js || failed=1; tsc --project tooling/tsconfig.json --noEmit || failed=1; node --check plugins/repl/workers/node-repl.mjs || failed=1; python3 -m py_compile plugins/repl/workers/python-kernel.py || failed=1; rm -rf plugins/repl/workers/__pycache__; depcruise --config tooling/dependency-cruiser.mjs plugins/repl || failed=1; knip --config tooling/knip.json --tsConfig tooling/tsconfig.json || failed=1; bun audit || failed=1; bun pm pack --dry-run || failed=1; exit \"$failed\"",
+    "fix": "failed=0; node tooling/update-direct-deps.mjs --apply || failed=1; bun install || failed=1; bun audit fix || failed=1; knip --config tooling/knip.json --tsConfig tooling/tsconfig.json --fix || failed=1; prettier . --write --config tooling/prettier.json || failed=1; eslint . --config tooling/eslint.config.js --fix || failed=1; bun install || failed=1; bun run check || failed=1; exit \"$failed\""
   },
   "files": [
     "plugins"
