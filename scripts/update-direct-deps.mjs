@@ -10,10 +10,14 @@ const sections = ['dependencies', 'devDependencies']
 const apply = process.argv.includes('--apply')
 const pkg = JSON.parse(readFileSync(packagePath, 'utf8'))
 
-function runBun(args, cwd) {
+function run(command, args, cwd) {
   try {
-    return execFileSync('bun', args, { cwd, encoding: 'utf8' })
+    return execFileSync(command, args, { cwd, encoding: 'utf8' })
   } catch (error) {
+    if (error.stdout) {
+      process.stderr.write(error.stdout)
+    }
+
     if (error.stderr) {
       process.stderr.write(error.stderr)
     }
@@ -22,36 +26,66 @@ function runBun(args, cwd) {
   }
 }
 
-function parseLock(cwd) {
-  const source = [
-    "const text = await Bun.file('bun.lock').text()",
-    'process.stdout.write(JSON.stringify(Bun.JSONC.parse(text)))'
-  ].join(';')
-
-  return JSON.parse(runBun(['-e', source], cwd))
-}
-
-function resolveGraph(manifest) {
-  const cwd = mkdtempSync(join(tmpdir(), 'opencode-repl-deps-'))
+function resolveCurrentGraph(manifest) {
+  const cwd = mkdtempSync(join(tmpdir(), 'opencode-repl-current-'))
 
   try {
     writeFileSync(join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
-    runBun(['install', '--lockfile-only', '--ignore-scripts', '--no-cache'], cwd)
-    return parseLock(cwd)
+    run('bun', ['install', '--lockfile-only', '--ignore-scripts', '--no-cache'], cwd)
+    const source = [
+      "const text = await Bun.file('bun.lock').text()",
+      'process.stdout.write(JSON.stringify(Bun.JSONC.parse(text)))'
+    ].join(';')
+
+    return JSON.parse(run('bun', ['-e', source], cwd))
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }
 }
 
-function resolvedVersion(lock, name) {
+function resolveCompatibleGraph(manifest) {
+  const cwd = mkdtempSync(join(tmpdir(), 'opencode-repl-compatible-'))
+
+  try {
+    writeFileSync(join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    run(
+      'npm',
+      [
+        'install',
+        '--package-lock-only',
+        '--ignore-scripts',
+        '--strict-peer-deps',
+        '--no-audit',
+        '--no-fund'
+      ],
+      cwd
+    )
+
+    return JSON.parse(readFileSync(join(cwd, 'package-lock.json'), 'utf8'))
+  } finally {
+    rmSync(cwd, { recursive: true, force: true })
+  }
+}
+
+function bunResolvedVersion(lock, name) {
   const resolution = lock.packages?.[name]?.[0]
   const prefix = `${name}@`
 
   if (typeof resolution !== 'string' || !resolution.startsWith(prefix)) {
-    throw new Error(`No root resolution found for ${name}`)
+    throw new Error(`No root Bun resolution found for ${name}`)
   }
 
   return resolution.slice(prefix.length)
+}
+
+function npmResolvedVersion(lock, name) {
+  const version = lock.packages?.[`node_modules/${name}`]?.version
+
+  if (typeof version !== 'string') {
+    throw new Error(`No root npm resolution found for ${name}`)
+  }
+
+  return version
 }
 
 function nextSpecifier(current, version) {
@@ -67,7 +101,7 @@ function nextSpecifier(current, version) {
 }
 
 process.stdout.write('Resolving current dependency graph...\n')
-const baseline = resolveGraph(pkg)
+const baseline = resolveCurrentGraph(pkg)
 const candidate = structuredClone(pkg)
 
 for (const section of sections) {
@@ -77,18 +111,18 @@ for (const section of sections) {
       continue
     }
 
-    candidate[section][name] = `>=${resolvedVersion(baseline, name)}`
+    candidate[section][name] = `>=${bunResolvedVersion(baseline, name)}`
   }
 }
 
-process.stdout.write('Resolving upgrade dependency graph...\n')
-const upgrade = resolveGraph(candidate)
+process.stdout.write('Resolving peer-compatible upgrade graph...\n')
+const upgrade = resolveCompatibleGraph(candidate)
 const changes = []
 
 for (const section of sections) {
   for (const [name, current] of Object.entries(pkg[section] ?? {})) {
     const next =
-      name === protectedPackage ? 'beta' : nextSpecifier(current, resolvedVersion(upgrade, name))
+      name === protectedPackage ? 'beta' : nextSpecifier(current, npmResolvedVersion(upgrade, name))
 
     if (next === current) {
       continue
@@ -104,7 +138,7 @@ for (const { section, name, current, next } of changes) {
 }
 
 if (changes.length === 0) {
-  process.stdout.write('All direct dependencies already match the resolved upgrade graph.\n')
+  process.stdout.write('All direct dependencies already match the compatible upgrade graph.\n')
 } else if (apply) {
   writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`)
   process.stdout.write('\npackage.json updated.\n')
