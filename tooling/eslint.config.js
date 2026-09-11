@@ -106,6 +106,11 @@ const config = defineConfig([
         projectService: false,
         tsconfigRootDir: repositoryRoot
       }
+    },
+    settings: {
+      n: {
+        tsconfigPath: 'tooling/tsconfig.json'
+      }
     }
   },
   {

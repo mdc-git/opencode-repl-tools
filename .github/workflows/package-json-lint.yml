@@ -62,7 +62,7 @@ jobs:
       - name: Check workers
         id: workers
         continue-on-error: true
-        run: node --check plugins/repl/workers/node-repl.mjs && python3 -m py_compile plugins/repl/workers/python-kernel.py && rm -rf plugins/repl/workers/__pycache__
+        run: node --check plugins/repl/workers/node-images.mjs && node --check plugins/repl/workers/node-repl.mjs && python3 -m py_compile plugins/repl/workers/python-kernel.py && rm -rf plugins/repl/workers/__pycache__
 
       - name: Check dependency architecture
         id: deps

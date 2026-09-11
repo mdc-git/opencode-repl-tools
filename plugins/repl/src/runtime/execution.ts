@@ -28,6 +28,26 @@ type StartupFailure = {
 
 type StartupResult = StartedInterpreter | StartupFailure
 
+function appendNodeImage(
+  state: RuntimeState,
+  cell: Cell,
+  event: Extract<NodeEvent, { type: 'image' }>
+): void {
+  const job = cell.active
+  if (job?.id !== event.jobId) {
+    state.dispatch(
+      handleFatal(state, cell, `Node REPL emitted image for unexpected job ${event.jobId}`)
+    )
+    return
+  }
+
+  job.images.push({
+    mime: event.mime,
+    data: event.data,
+    ...(event.name !== undefined && { name: event.name })
+  })
+}
+
 function onNodeEvent(state: RuntimeState, cell: Cell, event: NodeEvent): void {
   if (event.type === 'output') {
     cell.transcript.append(event.stream, event.text, event.jobId)
@@ -35,19 +55,7 @@ function onNodeEvent(state: RuntimeState, cell: Cell, event: NodeEvent): void {
   }
 
   if (event.type === 'image') {
-    const job = cell.active
-    if (job?.id === event.jobId) {
-      job.images.push({
-        mime: event.mime,
-        data: event.data,
-        ...(event.name !== undefined && { name: event.name })
-      })
-      return
-    }
-
-    state.dispatch(
-      handleFatal(state, cell, `Node REPL emitted image for unexpected job ${event.jobId}`)
-    )
+    appendNodeImage(state, cell, event)
     return
   }
 

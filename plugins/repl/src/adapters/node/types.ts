@@ -11,7 +11,7 @@ export class NodeStartupError extends Error {
   }
 }
 
-type NodeImage = {
+export type NodeImage = {
   readonly mime: string
   readonly data: string
   readonly name?: string

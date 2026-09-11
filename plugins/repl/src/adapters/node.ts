@@ -6,7 +6,12 @@ import { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node/t
 import { retireProcessGroup, type CleanupResult } from './process-group.ts'
 import { errorMessage } from './protocol.ts'
 
-export { NodeStartupError, type NodeEvent, type NodeInterpreter } from './node/types.ts'
+export {
+  NodeStartupError,
+  type NodeEvent,
+  type NodeImage,
+  type NodeInterpreter
+} from './node/types.ts'
 
 const workerPath = fileURLToPath(new URL('../../workers/node-repl.mjs', import.meta.url))
 const RETIRE_OPTIONS = {

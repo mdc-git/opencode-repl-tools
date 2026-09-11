@@ -9,6 +9,7 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
+  "files": ["../plugins/repl/index.ts"],
   "include": ["../plugins/**/*.ts"],
   "exclude": ["../.opencode/**"]
 }

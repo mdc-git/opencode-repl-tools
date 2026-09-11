@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import path from 'node:path'
 import process from 'node:process'
 
 const packagePath = 'package.json'
@@ -10,27 +10,27 @@ const sections = ['dependencies', 'devDependencies']
 const apply = process.argv.includes('--apply')
 const pkg = JSON.parse(readFileSync(packagePath, 'utf8'))
 
+function writeCommandOutput(output) {
+  if (typeof output === 'string') {
+    process.stderr.write(output)
+  }
+}
+
 function run(command, args, cwd) {
   try {
     return execFileSync(command, args, { cwd, encoding: 'utf8' })
   } catch (error) {
-    if (error.stdout) {
-      process.stderr.write(error.stdout)
-    }
-
-    if (error.stderr) {
-      process.stderr.write(error.stderr)
-    }
-
+    writeCommandOutput(error.stdout)
+    writeCommandOutput(error.stderr)
     throw error
   }
 }
 
 function resolveCurrentGraph(manifest) {
-  const cwd = mkdtempSync(join(tmpdir(), 'opencode-repl-current-'))
+  const cwd = mkdtempSync(path.join(tmpdir(), 'opencode-repl-current-'))
 
   try {
-    writeFileSync(join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    writeFileSync(path.join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
     run('bun', ['install', '--lockfile-only', '--ignore-scripts', '--no-cache'], cwd)
     const source = [
       "const text = await Bun.file('bun.lock').text()",
@@ -44,10 +44,10 @@ function resolveCurrentGraph(manifest) {
 }
 
 function resolveCompatibleGraph(manifest) {
-  const cwd = mkdtempSync(join(tmpdir(), 'opencode-repl-compatible-'))
+  const cwd = mkdtempSync(path.join(tmpdir(), 'opencode-repl-compatible-'))
 
   try {
-    writeFileSync(join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+    writeFileSync(path.join(cwd, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`)
     run(
       'npm',
       [
@@ -61,7 +61,7 @@ function resolveCompatibleGraph(manifest) {
       cwd
     )
 
-    return JSON.parse(readFileSync(join(cwd, 'package-lock.json'), 'utf8'))
+    return JSON.parse(readFileSync(path.join(cwd, 'package-lock.json'), 'utf8'))
   } finally {
     rmSync(cwd, { recursive: true, force: true })
   }
@@ -69,10 +69,13 @@ function resolveCompatibleGraph(manifest) {
 
 function bunResolvedVersion(lock, name) {
   const resolution = lock.packages?.[name]?.[0]
-  const prefix = `${name}@`
+  if (typeof resolution !== 'string') {
+    throw new TypeError(`No root Bun resolution found for ${name}`)
+  }
 
-  if (typeof resolution !== 'string' || !resolution.startsWith(prefix)) {
-    throw new Error(`No root Bun resolution found for ${name}`)
+  const prefix = `${name}@`
+  if (!resolution.startsWith(prefix)) {
+    throw new Error(`Unexpected root Bun resolution for ${name}: ${resolution}`)
   }
 
   return resolution.slice(prefix.length)
@@ -100,38 +103,40 @@ function nextSpecifier(current, version) {
   return version
 }
 
+function candidateSpecifier(name, baseline) {
+  return name === protectedPackage ? 'beta' : `>=${bunResolvedVersion(baseline, name)}`
+}
+
+function widenSection(manifest, section, baseline) {
+  for (const name of Object.keys(manifest[section] ?? {})) {
+    manifest[section][name] = candidateSpecifier(name, baseline)
+  }
+}
+
+function sectionChanges(manifest, section, upgrade) {
+  const changes = []
+  for (const [name, current] of Object.entries(manifest[section] ?? {})) {
+    const next =
+      name === protectedPackage ? 'beta' : nextSpecifier(current, npmResolvedVersion(upgrade, name))
+    if (next !== current) {
+      changes.push({ section, name, current, next })
+      manifest[section][name] = next
+    }
+  }
+
+  return changes
+}
+
 process.stdout.write('Resolving current dependency graph...\n')
 const baseline = resolveCurrentGraph(pkg)
 const candidate = structuredClone(pkg)
-
 for (const section of sections) {
-  for (const name of Object.keys(candidate[section] ?? {})) {
-    if (name === protectedPackage) {
-      candidate[section][name] = 'beta'
-      continue
-    }
-
-    candidate[section][name] = `>=${bunResolvedVersion(baseline, name)}`
-  }
+  widenSection(candidate, section, baseline)
 }
 
 process.stdout.write('Resolving peer-compatible upgrade graph...\n')
 const upgrade = resolveCompatibleGraph(candidate)
-const changes = []
-
-for (const section of sections) {
-  for (const [name, current] of Object.entries(pkg[section] ?? {})) {
-    const next =
-      name === protectedPackage ? 'beta' : nextSpecifier(current, npmResolvedVersion(upgrade, name))
-
-    if (next === current) {
-      continue
-    }
-
-    changes.push({ section, name, current, next })
-    pkg[section][name] = next
-  }
-}
+const changes = sections.flatMap((section) => sectionChanges(pkg, section, upgrade))
 
 for (const { section, name, current, next } of changes) {
   process.stdout.write(`${section}: ${name}: ${current} -> ${next}\n`)
