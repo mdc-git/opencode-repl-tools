@@ -76,8 +76,8 @@ RUN set -eux; \
     chown -R root:root /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache /usr/local/bin/gh /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/run-demo-session /usr/local/bin/publish-demo; \
     chmod -R a-w /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
     chmod -R a+rX /opt/opencode /opt/opencode-repl-tools /opt/opencode-repl-cache; \
-    chmod 0700 /root /usr/local/bin/gh /usr/local/bin/ttyd /usr/local/bin/run-demo-container /usr/local/bin/publish-demo; \
-    chmod 0755 /usr/local/bin/run-demo-session; \
+    chmod 0700 /root /usr/local/bin/gh /usr/local/bin/run-demo-container /usr/local/bin/publish-demo; \
+    chmod 0755 /usr/local/bin/ttyd /usr/local/bin/run-demo-session; \
     find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +; \
     find / -xdev \( -type f -o -type d \) -perm -0002 -exec chmod o-w {} +; \
     test -x /usr/local/bin/ttyd; \
