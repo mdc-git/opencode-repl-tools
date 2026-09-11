@@ -186,9 +186,9 @@ jobs:
           '
 
           docker inspect --format '{{range .RootFS.Layers}}{{println .}}{{end}}' "$sandbox" \
-            >"$layer_dir/sandbox"
+            | sed '/^$/d' >"$layer_dir/sandbox"
           docker inspect --format '{{range .RootFS.Layers}}{{println .}}{{end}}' "$controller" \
-            >"$layer_dir/controller"
+            | sed '/^$/d' >"$layer_dir/controller"
           sandbox_layer_count="$(wc -l <"$layer_dir/sandbox")"
           head -n "$sandbox_layer_count" "$layer_dir/controller" >"$layer_dir/controller-prefix"
           cmp "$layer_dir/sandbox" "$layer_dir/controller-prefix"
