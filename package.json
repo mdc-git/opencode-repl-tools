@@ -7,14 +7,8 @@
   "exports": "./plugins/repl/index.ts",
   "sideEffects": false,
   "scripts": {
-    "audit": "bun audit",
-    "check:deps": "depcruise --config .dependency-cruiser.mjs plugins/repl",
-    "check:knip": "knip",
-    "check:workers": "node --check plugins/repl/workers/node-repl.mjs && python3 -m py_compile plugins/repl/workers/python-kernel.py && rm -rf plugins/repl/workers/__pycache__",
-    "format": "prettier . --write",
-    "format:check": "prettier . --check",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "check": "failed=0; node scripts/update-direct-deps.mjs || failed=1; prettier . --check || failed=1; eslint . || failed=1; tsc --noEmit || failed=1; node --check plugins/repl/workers/node-repl.mjs || failed=1; python3 -m py_compile plugins/repl/workers/python-kernel.py || failed=1; rm -rf plugins/repl/workers/__pycache__; depcruise --config .dependency-cruiser.mjs plugins/repl || failed=1; knip || failed=1; bun audit || failed=1; bun pm pack --dry-run || failed=1; exit \"$failed\"",
+    "fix": "failed=0; node scripts/update-direct-deps.mjs --apply || failed=1; bun install || failed=1; bun audit fix || failed=1; knip --fix || failed=1; prettier . --write || failed=1; eslint . --fix || failed=1; bun install || failed=1; bun run check || failed=1; exit \"$failed\""
   },
   "files": [
     "plugins"
