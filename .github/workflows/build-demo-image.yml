@@ -130,9 +130,9 @@ jobs:
         shell: bash
         run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
 
-      - name: Install Dev Container CLI
+      - name: Install Codespaces Dev Container CLI version
         shell: bash
-        run: npm install --global @devcontainers/cli@0.89.0
+        run: npm install --global @devcontainers/cli@0.83.3
 
       - name: Smoke test Codespaces controller
         shell: bash
@@ -141,11 +141,9 @@ jobs:
           result=$(mktemp)
           controller_id=
           sandbox_name=opencode-repl-tools-demo-sandbox
-          proxy_name=opencode-repl-tools-demo-proxy
           cleanup() {
             docker logs "$sandbox_name" 2>/dev/null || true
-            docker logs "$proxy_name" 2>/dev/null || true
-            docker rm --force "$sandbox_name" "$proxy_name" >/dev/null 2>&1 || true
+            docker rm --force "$sandbox_name" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
               docker logs "$controller_id" 2>/dev/null || true
               docker rm --force "$controller_id" >/dev/null 2>&1 || true
@@ -163,6 +161,8 @@ jobs:
           test -n "$controller_id"
           test "$controller_id" != null
 
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$controller_id")" = host
+
           for _ in $(seq 1 300); do
             if docker exec "$controller_id" curl --fail --silent --show-error \
                 http://127.0.0.1:7681/ >/dev/null 2>&1; then
@@ -178,13 +178,6 @@ jobs:
           docker exec "$controller_id" curl --fail --silent --show-error \
             http://127.0.0.1:7681/ >/dev/null
           docker inspect --format '{{.State.Running}}' "$sandbox_name" | grep -qx true
-          docker inspect --format '{{.State.Running}}' "$proxy_name" | grep -qx true
-          docker exec "$controller_id" sh -ceu \
-            'ss -lnt | grep -Eq "[[:space:]]0\.0\.0\.0:7681[[:space:]]"'
-
-          test "$(docker inspect --format '{{.Config.User}}' "$proxy_name")" = "65534:65534"
-          test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$proxy_name")" = true
-          test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$proxy_name")" = false
-          docker inspect --format '{{json .HostConfig.CapDrop}}' "$proxy_name" | grep -Eq '"ALL"'
-          docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$proxy_name" | grep -Eq 'no-new-privileges'
-          test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$proxy_name")" = null
+          test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$sandbox_name")" = bridge
+          docker inspect --format '{{json .HostConfig.PortBindings}}' "$sandbox_name" \
+            | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
