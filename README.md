@@ -4,6 +4,36 @@ OpenCode REPL Tools adds persistent Node.js/TypeScript and Python REPLs to OpenC
 
 The plugin runs trusted local code on Linux. It is not a sandbox.
 
+## Browser demo
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools/tree/demo?quickstart=1)
+
+The `demo` branch launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
+
+The browser TUI runs as the dedicated `opencode-demo` Unix user. The container first snapshots the repository into a root-owned read-only source tree, then removes access by the demo identity to the real `/workspaces` checkout. Root lifecycle commands execute image-owned scripts rather than files from the mutable checkout.
+
+Up to four browser tabs or windows can attach to the same active OpenCode TUI through a shared `tmux` session. When the last browser disconnects, `ttyd` exits, the shared OpenCode process is retired, and the disposable OpenCode HOME and writable workspace are removed before the next connection cohort starts. Shared OpenCode binaries, Node dependencies, and the prewarmed Python environment are root-owned and read-only.
+
+OpenCode and the REPL workers start from a minimal explicit environment and do not inherit the normal Codespaces environment, including `GITHUB_TOKEN` or Codespaces secrets.
+
+After the Codespace starts, the image-owned publisher waits for `ttyd`, makes forwarded port `7681` public, verifies the port visibility, and opens:
+
+```text
+https://<codespace-name>-7681.app.github.dev/
+```
+
+Public-port availability depends on the repository or organization Codespaces policy. The public terminal intentionally permits arbitrary code execution as `opencode-demo`; anyone who can reach the URL controls the active demo session. Do not enter a valuable provider credential into a public demo session. A credential connected during the active session is readable by code running as the same Unix identity even though it is removed before the next browser cohort starts.
+
+Connect an LLM provider from the TUI with `/connect`, then ask OpenCode to use `repl_node` or `repl_python`.
+
+If the browser terminal does not start, inspect:
+
+```sh
+cat "$HOME/.cache/opencode-repl-tools-preview.log"
+```
+
+The demo image is built by `.github/workflows/build-demo-image.yml`. BuildKit cache keeps its independent toolchain and dependency stages reusable. The image smoke test also verifies that the public demo identity cannot read the real source checkout or modify the shared runtime. A Codespaces prebuild can additionally snapshot the ready image for the `demo` branch if minimum cold-start latency is required.
+
 ## Requirements
 
 - OpenCode V2 with `@opencode/plugin` beta support.
