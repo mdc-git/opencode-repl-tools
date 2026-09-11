@@ -14,6 +14,7 @@
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
   "remoteUser": "root",
+  "runArgs": ["--network=host"],
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
