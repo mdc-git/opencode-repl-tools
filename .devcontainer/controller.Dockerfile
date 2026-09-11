@@ -15,6 +15,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     set -eux; \
+    chmod 1777 /tmp; \
     apt-get update; \
     apt-get install -y --no-install-recommends curl git openssh-client; \
     archive="gh_${GH_VERSION}_linux_amd64.tar.gz"; \
