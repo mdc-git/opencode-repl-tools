@@ -98,7 +98,7 @@ jobs:
             runuser -u opencode-demo -- test ! -w /opt/opencode-repl-cache
 
           docker exec opencode-repl-tools-demo-smoke \
-            sh -ceu '
+            sh -ceux '
               test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
               test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
 
