@@ -8,7 +8,7 @@ The plugin runs trusted local code on Linux. It is not a sandbox.
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/mdc-git/opencode-repl-tools/tree/demo?quickstart=1)
 
-The `demo` branch launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
+The demo launches from `ghcr.io/mdc-git/opencode-repl-tools-demo:demo`. The image already contains Node 26, OpenCode V2, `ttyd`, GitHub CLI, the plugin's production Node dependencies, and the Python REPL environment. Codespace startup performs no package installation or tool downloads.
 
 The browser TUI runs as the dedicated `opencode-demo` Unix user. The container first snapshots the repository into a root-owned read-only source tree, then removes access by the demo identity to the real `/workspaces` checkout. Root lifecycle commands execute image-owned scripts rather than files from the mutable checkout.
 
