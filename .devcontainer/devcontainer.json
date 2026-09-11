@@ -13,7 +13,8 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "remoteUser": "vscode",
+  "remoteUser": "root",
+  "overrideCommand": false,
   "forwardPorts": [7681],
   "portsAttributes": {
     "7681": {
@@ -22,5 +23,5 @@
       "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "/usr/local/bin/start-demo-sandbox && nohup /usr/local/bin/publish-demo </dev/null >>$HOME/.cache/opencode-repl-tools-preview.log 2>&1 &"
+  "postAttachCommand": "/usr/local/bin/publish-demo"
 }
