@@ -109,7 +109,7 @@ jobs:
 
               ttyd_pid=
               for proc in /proc/[0-9]*; do
-                if [ -r "$proc/cmdline" ] && tr "\000" " " <"$proc/cmdline" | grep -q "/usr/local/bin/ttyd"; then
+                if [ "$(readlink "$proc/exe" 2>/dev/null || true)" = /usr/local/bin/ttyd ]; then
                   ttyd_pid=${proc##*/}
                   break
                 fi
