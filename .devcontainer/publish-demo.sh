@@ -2,32 +2,47 @@
 set -euo pipefail
 
 PORT=7681
-LOG=$HOME/.cache/opencode-repl-tools-preview.log
+CACHE_DIR=$HOME/.cache
+LOG=$CACHE_DIR/opencode-repl-tools-preview.log
+ERROR_LOG=$CACHE_DIR/opencode-repl-tools-publish-error.log
 CODESPACE=${CODESPACE_NAME:?CODESPACE_NAME is not set}
 TOKEN=${GITHUB_TOKEN:?GITHUB_TOKEN is not set}
 
-for _ in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+rm -f "$ERROR_LOG"
+
+published=0
+for _ in $(seq 1 120); do
+  visibility=$(GH_TOKEN="$TOKEN" gh codespace ports -c "$CODESPACE" --json sourcePort,visibility \
+    --jq ".[] | select(.sourcePort == $PORT) | .visibility" 2>"$ERROR_LOG" || true)
+
+  if [[ "$visibility" == public ]]; then
+    published=1
     break
   fi
+
+  if [[ -n "$visibility" ]] \
+    && GH_TOKEN="$TOKEN" gh codespace ports visibility "$PORT:public" -c "$CODESPACE" \
+      >"$ERROR_LOG" 2>&1; then
+    visibility=$(GH_TOKEN="$TOKEN" gh codespace ports -c "$CODESPACE" --json sourcePort,visibility \
+      --jq ".[] | select(.sourcePort == $PORT) | .visibility" 2>"$ERROR_LOG" || true)
+    if [[ "$visibility" == public ]]; then
+      published=1
+      break
+    fi
+  fi
+
   sleep 1
 done
 
-if ! curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
-  echo "ttyd is not responding on port $PORT" >>"$LOG"
+if (( published == 0 )); then
+  echo "failed to make port $PORT public after waiting for Codespaces port registration" >>"$LOG"
+  if [[ -s "$ERROR_LOG" ]]; then
+    cat "$ERROR_LOG" >>"$LOG"
+  fi
   exit 1
 fi
 
-GH_TOKEN="$TOKEN" gh codespace ports visibility "$PORT:public" -c "$CODESPACE" >>"$LOG" 2>&1
-
-visibility=$(GH_TOKEN="$TOKEN" gh codespace ports -c "$CODESPACE" --json sourcePort,visibility \
-  --jq ".[] | select(.sourcePort == $PORT) | .visibility")
-
-if [[ "$visibility" != public ]]; then
-  echo "port $PORT visibility is '$visibility', expected 'public'" >>"$LOG"
-  exit 1
-fi
-
+rm -f "$ERROR_LOG"
 url="https://${CODESPACE}-${PORT}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-app.github.dev}/"
 echo "OpenCode TUI: $url" >>"$LOG"
 

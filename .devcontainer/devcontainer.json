@@ -22,5 +22,5 @@
       "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "/usr/local/bin/start-demo-sandbox && /usr/local/bin/publish-demo"
+  "postStartCommand": "/usr/local/bin/start-demo-sandbox && nohup /usr/local/bin/publish-demo </dev/null >>$HOME/.cache/opencode-repl-tools-preview.log 2>&1 &"
 }
