@@ -57,9 +57,9 @@ The two runtime images are deliberately related:
 
 `controller.Dockerfile` is based on the already validated `:demo` image. Pulling `:controller` therefore brings the sandbox filesystem layers into the same Docker daemon that will later start `:demo`. `start-demo-sandbox` still performs an explicit `docker pull :demo` so the child tag is current, but matching layers can be reused locally instead of transferred a second time.
 
-The sandbox Dockerfile keeps expensive work in independent build stages. OpenCode, production Node dependencies, ttyd, and the prewarmed Python environment are built before the small source-snapshot layers. Source changes therefore do not invalidate unrelated toolchain work.
+The sandbox Dockerfile keeps expensive work in independent build stages. Bun is used for JavaScript package installation in disposable builder stages only. OpenCode is installed from `@opencode/cli@beta`, its postinstall-selected native `opencode2` executable is resolved, and only that executable is copied into the final sandbox. Production plugin dependencies are installed from `bun.lock` with lifecycle scripts disabled, and only the resulting `node_modules` tree is copied into the runtime. Bun itself, its caches, and package-manager metadata do not become runtime dependencies.
 
-OpenCode V2 follows the rolling beta channel. The image build resolves `@opencode/cli@beta`, while the plugin dependency is `@opencode/plugin: "beta"`. CI supplies a fresh beta cache key for image builds so a rolling tag is deliberately re-resolved instead of becoming accidentally frozen by Docker cache reuse. Runtime startup itself uses the prebuilt CLI and does not install packages before serving the TUI.
+OpenCode V2 follows the rolling beta channel. The image build resolves `@opencode/cli@beta`, while the plugin dependency is `@opencode/plugin: "beta"`. CI supplies a fresh beta cache key for image builds so a rolling tag is deliberately re-resolved instead of becoming accidentally frozen by Docker cache reuse. Runtime startup itself uses the prebuilt native CLI and does not install packages before serving the TUI.
 
 ## Codespace lifecycle
 
@@ -165,10 +165,11 @@ The implementation can be reduced to a small set of rules:
 6. Start from an immutable child image, add only bounded writable tmpfs storage, and explicitly allow executable mappings only where the native TUI runtime requires them.
 7. Sanitize the environment at every trust boundary instead of trying to delete individual secret variable names after inheritance.
 8. Bake dependencies and a source snapshot into the image; copy only disposable workspace state at session start.
-9. Build the trusted controller on top of the validated sandbox image so one Codespace image pull also preloads the expensive child layers.
-10. Test the real terminal/session process in CI, not only the TCP or HTTP listener.
-11. Verify public-port visibility after readiness rather than assuming publication succeeded.
-12. Treat same-kernel escape, outbound egress, and shared-client terminal state as explicit residual risks rather than properties provided by container hardening.
+9. Use Bun only in disposable builder stages, and copy only the selected native OpenCode executable and production plugin dependency tree into the sandbox runtime.
+10. Build the trusted controller on top of the validated sandbox image so one Codespace image pull also preloads the expensive child layers.
+11. Test the real terminal/session process in CI, not only the TCP or HTTP listener.
+12. Verify public-port visibility after readiness rather than assuming publication succeeded.
+13. Treat same-kernel escape, outbound egress, and shared-client terminal state as explicit residual risks rather than properties provided by container hardening.
 
 ## File map
 
@@ -176,7 +177,7 @@ The implementation can be reduced to a small set of rules:
 | --- | --- |
 | `devcontainer.json` | Select the prebuilt controller, provide host networking and Docker socket access, declare port 7681, and wire lifecycle hooks. |
 | `controller.Dockerfile` | Build the trusted management image on top of `:demo` and add Docker CLI, `gh`, git, SSH, and orchestration scripts. |
-| `Dockerfile` | Build the hardened public sandbox runtime and preinstall OpenCode, ttyd, plugin dependencies, Python dependencies, and the source snapshot. |
+| `Dockerfile` | Use Bun builder stages to assemble the native OpenCode executable and production plugin dependencies, then build the hardened public sandbox runtime with ttyd, Python dependencies, and the source snapshot. |
 | `start-demo-sandbox.sh` | Pull and recreate the child, bind it to loopback, and wait for readiness. |
 | `run-demo-sandbox.sh` | Define the Docker security, resource, filesystem, network, and logging boundary for public code. |
 | `publish-demo.sh` | Make the ready Codespaces port public, verify visibility, and record/open the public URL. |
