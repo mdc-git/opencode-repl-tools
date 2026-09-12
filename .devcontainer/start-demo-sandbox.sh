@@ -7,40 +7,69 @@ SANDBOX_NAME=opencode-repl-tools-demo-sandbox
 PORT=7681
 CACHE_DIR=$HOME/.cache
 LOG=$CACHE_DIR/opencode-repl-tools-preview.log
-VERSION_API=https://api.github.com/repos/anomalyco/opencode/git/matching-refs/tags/v2.
 
 mkdir -p "$CACHE_DIR"
 : >"$LOG"
 
-build_context=
-cleanup() {
+docker pull "$IMAGE" >>"$LOG" 2>&1
+
+build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
+cleanup_build() {
   status=$?
-  if [[ -n "$build_context" ]]; then
-    rm -rf "$build_context"
-  fi
   if (( status != 0 )); then
     cat "$LOG" >&2 || true
   fi
+  rm -rf "$build_context"
   exit "$status"
 }
-trap cleanup EXIT
+trap cleanup_build EXIT
 
-docker pull "$IMAGE" >>"$LOG" 2>&1
-base_id="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
+cat >"$build_context/Dockerfile" <<'EOF'
+# syntax=docker/dockerfile:1.7
+ARG DEMO_IMAGE
+ARG BUN_IMAGE=oven/bun:1
 
-fetch_latest_version() {
-  local refs version
-  refs="$(curl -fsSL "$VERSION_API")"
-  version="$(printf '%s' "$refs" \
-    | grep -oE '"ref"[[:space:]]*:[[:space:]]*"refs/tags/v2\.[0-9]+\.[0-9]+"' \
-    | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+)"/\1/' \
-    | sort -V \
-    | tail -n 1)"
-  test -n "$version"
-  printf '%s\n' "$version"
-}
+FROM ${BUN_IMAGE} AS opencode-tooling
+ARG OPENCODE_UPDATE_CACHE_KEY
+USER root
+ENV BUN_INSTALL=/opt/opencode-install \
+    PATH=/opt/opencode-install/bin:/usr/local/bin:/usr/bin:/bin \
+    HOME=/root
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    set -eux; \
+    test -n "$OPENCODE_UPDATE_CACHE_KEY"; \
+    bun install --global --trust "@opencode/cli@beta"; \
+    echo "OpenCode bootstrap: $(opencode2 --version)"; \
+    opencode2 update --method bun; \
+    echo "OpenCode after update 1: $(opencode2 --version)"; \
+    opencode2 update --method bun; \
+    second="$(opencode2 --version)"; \
+    echo "OpenCode after update 2: $second"; \
+    opencode2 update --method bun; \
+    third="$(opencode2 --version)"; \
+    echo "OpenCode after update 3: $third"; \
+    test "$second" = "$third"; \
+    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
+    test -x "$opencode_path"; \
+    install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
+    /opt/opencode/bin/opencode2 --version
 
-runtime_version() {
+FROM ${DEMO_IMAGE}
+COPY --from=opencode-tooling /opt/opencode/bin/opencode2 /opt/opencode/bin/opencode2
+EOF
+
+update_cache_key="$(date +%s%N)"
+docker build \
+  --build-arg "DEMO_IMAGE=$IMAGE" \
+  --build-arg "OPENCODE_UPDATE_CACHE_KEY=$update_cache_key" \
+  --tag "$RUNTIME_IMAGE" \
+  "$build_context" \
+  >>"$LOG" 2>&1
+
+rm -rf "$build_context"
+trap - EXIT
+
+runtime_version="$(
   docker run --rm \
     --read-only \
     --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
@@ -48,84 +77,17 @@ runtime_version() {
     --entrypoint /opt/opencode/bin/opencode2 \
     "$RUNTIME_IMAGE" \
     --version \
-    2>>"$LOG" \
-    | awk '{print $NF}' \
-    | sed 's/^v//'
-}
-
-runtime_ready=false
-for attempt in 1 2 3; do
-  latest_version="$(fetch_latest_version)"
-  opencode_image="ghcr.io/anomalyco/opencode:$latest_version"
-  echo "latest OpenCode v2: $latest_version" >>"$LOG"
-
-  cached_runtime_version="$(docker image inspect --format '{{index .Config.Labels "io.opencode.version"}}' "$RUNTIME_IMAGE" 2>/dev/null || true)"
-  cached_runtime_base="$(docker image inspect --format '{{index .Config.Labels "io.opencode.base"}}' "$RUNTIME_IMAGE" 2>/dev/null || true)"
-
-  if [[ "$cached_runtime_version" != "$latest_version" || "$cached_runtime_base" != "$base_id" ]]; then
-    build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
-    cat >"$build_context/Dockerfile" <<'EOF'
-# syntax=docker/dockerfile:1.7
-ARG DEMO_IMAGE
-ARG OPENCODE_IMAGE
-FROM ${OPENCODE_IMAGE} AS opencode-release
-RUN /usr/local/bin/opencode --version
-
-FROM ${DEMO_IMAGE}
-ARG OPENCODE_VERSION
-ARG OPENCODE_BASE
-LABEL io.opencode.version="$OPENCODE_VERSION" \
-      io.opencode.base="$OPENCODE_BASE"
-COPY --from=opencode-release /usr/local/bin/opencode /opt/opencode/bin/opencode2
-EOF
-
-    if ! docker build \
-      --build-arg "DEMO_IMAGE=$IMAGE" \
-      --build-arg "OPENCODE_IMAGE=$opencode_image" \
-      --build-arg "OPENCODE_VERSION=$latest_version" \
-      --build-arg "OPENCODE_BASE=$base_id" \
-      --tag "$RUNTIME_IMAGE" \
-      "$build_context" \
-      >>"$LOG" 2>&1; then
-      echo "failed to build runtime from $opencode_image" >>"$LOG"
-      if (( attempt == 3 )); then
-        exit 1
-      fi
-      rm -rf "$build_context"
-      build_context=
-      sleep 1
-      continue
-    fi
-
-    rm -rf "$build_context"
-    build_context=
-  fi
-
-  installed_version="$(runtime_version)"
-  echo "runtime OpenCode v2: $installed_version" >>"$LOG"
-  if [[ "$installed_version" != "$latest_version" ]]; then
-    echo "runtime OpenCode version mismatch: expected $latest_version, got $installed_version" >>"$LOG"
-    docker image rm --force "$RUNTIME_IMAGE" >>"$LOG" 2>&1 || true
-    continue
-  fi
-
-  confirmed_latest="$(fetch_latest_version)"
-  if [[ "$installed_version" == "$confirmed_latest" ]]; then
-    runtime_ready=true
-    break
-  fi
-
-  echo "OpenCode v2 advanced during startup: $installed_version -> $confirmed_latest; refreshing" >>"$LOG"
-  docker image rm --force "$RUNTIME_IMAGE" >>"$LOG" 2>&1 || true
-  if (( attempt < 3 )); then
-    continue
-  fi
-done
-
-if [[ "$runtime_ready" != true ]]; then
-  echo "could not prepare the latest OpenCode v2 runtime" >>"$LOG"
-  exit 1
-fi
+    2>>"$LOG"
+)"
+echo "runtime OpenCode: $runtime_version" >>"$LOG"
+case "$runtime_version" in
+  "opencode v2."*) ;;
+  *)
+    echo "runtime OpenCode is not a stable V2 build: $runtime_version" >>"$LOG"
+    cat "$LOG" >&2
+    exit 1
+    ;;
+esac
 
 /usr/local/bin/run-demo-sandbox \
   "$RUNTIME_IMAGE" \
@@ -141,6 +103,7 @@ for _ in $(seq 1 100); do
   if [[ "$(docker inspect --format '{{.State.Running}}' "$SANDBOX_NAME" 2>/dev/null || true)" != true ]]; then
     docker logs "$SANDBOX_NAME" >>"$LOG" 2>&1 || true
     echo "demo sandbox exited before ttyd became ready" >>"$LOG"
+    cat "$LOG" >&2
     exit 1
   fi
 
@@ -149,4 +112,5 @@ done
 
 docker logs "$SANDBOX_NAME" >>"$LOG" 2>&1 || true
 echo "demo sandbox did not become ready on port $PORT" >>"$LOG"
+cat "$LOG" >&2
 exit 1
