@@ -51,6 +51,9 @@ docker build \
   >>"$LOG" 2>&1
 
 docker run --rm \
+  --read-only \
+  --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=1001,gid=1001,mode=0700 \
   --entrypoint /opt/opencode/bin/opencode2 \
   "$RUNTIME_IMAGE" \
   --version \
