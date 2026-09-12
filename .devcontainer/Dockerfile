@@ -32,6 +32,8 @@ RUN set -eux; \
 FROM bun-runtime AS opencode-tooling
 ARG OPENCODE_UPDATE_CACHE_KEY
 ENV BUN_INSTALL=/opt/opencode-runtime \
+    BUN_INSTALL_GLOBAL_DIR=/opt/opencode-runtime/install/global \
+    BUN_INSTALL_BIN=/opt/opencode-runtime/bin \
     PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
@@ -48,8 +50,9 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     echo "OpenCode after update 3: $third"; \
     test "$second" = "$third"; \
     case "$third" in opencode\ v2.*) ;; *) echo "OpenCode updater did not converge on stable V2: $third" >&2; exit 1 ;; esac; \
-    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
-    test -x "$opencode_path"
+    test -x /opt/opencode-runtime/bin/opencode2; \
+    opencode_path="$(readlink -f /opt/opencode-runtime/bin/opencode2)"; \
+    case "$opencode_path" in /opt/opencode-runtime/*) ;; *) exit 1 ;; esac
 
 FROM bun-runtime AS node-dependencies
 WORKDIR /opt/opencode-repl-tools

@@ -53,6 +53,8 @@ timeout --kill-after=5s 120s docker run --rm \
   -i \
   HOME=/tmp/home \
   BUN_INSTALL=/opt/opencode-runtime \
+  BUN_INSTALL_GLOBAL_DIR=/opt/opencode-runtime/install/global \
+  BUN_INSTALL_BIN=/opt/opencode-runtime/bin \
   PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin \
   /bin/bash -ceu '
     mkdir -p "$HOME"
