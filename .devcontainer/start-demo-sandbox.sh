@@ -14,7 +14,7 @@ mkdir -p "$CACHE_DIR"
 docker pull "$IMAGE" >>"$LOG" 2>&1
 
 build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
-trap 'rm -rf "$build_context"' EXIT
+trap 'status=$?; if (( status != 0 )); then cat "$LOG" >&2 || true; fi; rm -rf "$build_context"; exit "$status"' EXIT
 
 cat >"$build_context/Dockerfile" <<'EOF'
 # syntax=docker/dockerfile:1.7
