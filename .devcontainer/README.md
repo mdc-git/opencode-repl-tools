@@ -73,27 +73,25 @@ This separation keeps container startup deterministic: service creation happens 
 
 ## Sandbox hardening
 
-`run-demo-sandbox.sh` is the security boundary for arbitrary visitor code. The child is started with the following properties:
+`run-demo-sandbox.sh` is the security boundary for arbitrary visitor code. The child runs with these controls:
 
-| Control | Current setting | Purpose |
-| --- | --- | --- |
-| Identity | `1001:1001` | Do not run public code as container root. |
-| Root filesystem | read-only | Prevent modification of the image and installed runtime. |
-| Linux capabilities | `--cap-drop ALL` | Remove ambient kernel privileges. |
-| Privilege escalation | `no-new-privileges` | Prevent gaining privilege through executable metadata. |
-| Cgroup namespace | private | Avoid sharing the controller's cgroup namespace. |
-| PID limit | 128 | Bound process-fork abuse. |
-| Memory | 2 GiB | Bound memory abuse. |
-| CPU | 2 CPUs | Bound CPU abuse. |
-| File descriptors | 256 | Bound descriptor exhaustion. |
-| Processes | 128 | Reinforce process limits inside the shell environment. |
-| Core dumps | disabled | Avoid large or sensitive crash artifacts. |
-| Home tmpfs | 512 MiB, `rw,exec,nosuid,nodev`, mode `0700` | Provide private disposable writable state and allow native OpenTUI shared libraries to be mapped. |
-| `/tmp` tmpfs | 64 MiB, `rw,nosuid,nodev,noexec`, mode `0700` | Provide bounded temporary storage without executable mappings. |
-| Network | Docker bridge | Keep the public process out of the controller's host network namespace. |
-| Published port | `127.0.0.1:7681` only | Expose the child to Codespaces forwarding without a direct external Docker bind. |
-| Bind mounts | none | Keep the checkout, Docker socket, host files, and controller state out of the child. |
-| Logging | Docker `local`, 10 MiB × 2 | Bound persistent Docker log growth. |
+- Identity is `1001:1001`, so public code does not run as container root.
+- The root filesystem is read-only, preventing modification of the image and installed runtime.
+- Linux capabilities are removed with `--cap-drop ALL`.
+- `no-new-privileges` prevents privilege escalation through executable metadata.
+- The cgroup namespace is private.
+- The PID limit is 128.
+- Memory is limited to 2 GiB.
+- CPU is limited to 2 CPUs.
+- File descriptors are limited to 256.
+- Processes are limited to 128 inside the shell environment.
+- Core dumps are disabled.
+- The home tmpfs is 512 MiB with `rw,exec,nosuid,nodev` and mode `0700`.
+- `/tmp` is a 64 MiB tmpfs with `rw,nosuid,nodev,noexec` and mode `0700`.
+- Networking uses Docker bridge mode, keeping the public process out of the controller's host network namespace.
+- Only `127.0.0.1:7681` is published, exposing the child to Codespaces forwarding without a direct external Docker bind.
+- No bind mounts are provided, keeping the checkout, Docker socket, host files, and controller state out of the child.
+- Docker's `local` log driver is limited to two 10 MiB files.
 
 The executable home tmpfs is intentional. OpenCode's Bun/OpenTUI runtime extracts native shared libraries into the session temporary directory and loads them with `dlopen`, which requires executable mappings. Arbitrary code execution is already the intended workload inside this container, so blocking executable mappings in the active session home does not create a meaningful code-execution boundary; it only prevents the TUI from functioning. `/tmp` remains `noexec` as a separate defense-in-depth control.
 
@@ -174,13 +172,11 @@ The implementation can be reduced to a small set of rules:
 
 ## File map
 
-| File | Responsibility |
-| --- | --- |
-| `devcontainer.json` | Select the prebuilt controller, provide host networking and Docker socket access, declare port 7681, and wire lifecycle hooks. |
-| `controller.Dockerfile` | Build the trusted management image on top of `:demo` and add Docker CLI, `gh`, git, SSH, and orchestration scripts. |
-| `Dockerfile` | Use Bun builder stages to assemble the native OpenCode executable and production plugin dependencies, then build the hardened public sandbox runtime with ttyd, Python dependencies, and the source snapshot. |
-| `start-demo-sandbox.sh` | Pull `:demo`, resolve the current OpenCode beta in a disposable Bun builder, build and verify the local runtime overlay, recreate the child, bind it to loopback, and wait for readiness. |
-| `run-demo-sandbox.sh` | Define the Docker security, resource, filesystem, network, and logging boundary for public code. |
-| `publish-demo.sh` | Make the ready Codespaces port public, verify visibility, and record/open the public URL. |
-| `run-demo-container.sh` | Sanitize the child environment and supervise ttyd/tmux cohorts inside the sandbox. |
-| `run-demo-session.sh` | Create the disposable OpenCode home/workspace and launch the standalone TUI with preinstalled runtime dependencies. |
+- `devcontainer.json` selects the prebuilt controller, provides host networking and Docker socket access, declares port 7681, and wires lifecycle hooks.
+- `controller.Dockerfile` builds the trusted management image on top of `:demo` and adds Docker CLI, `gh`, git, SSH, and orchestration scripts.
+- `Dockerfile` uses Bun builder stages to assemble the native OpenCode executable and production plugin dependencies, then builds the hardened public sandbox runtime with ttyd, Python dependencies, and the source snapshot.
+- `start-demo-sandbox.sh` pulls `:demo`, resolves the current OpenCode beta in a disposable Bun builder, builds and verifies the local runtime overlay, recreates the child, binds it to loopback, and waits for readiness.
+- `run-demo-sandbox.sh` defines the Docker security, resource, filesystem, network, and logging boundary for public code.
+- `publish-demo.sh` makes the ready Codespaces port public, verifies visibility, and records or opens the public URL.
+- `run-demo-container.sh` sanitizes the child environment and supervises ttyd/tmux cohorts inside the sandbox.
+- `run-demo-session.sh` creates the disposable OpenCode home and workspace and launches the standalone TUI with preinstalled runtime dependencies.
