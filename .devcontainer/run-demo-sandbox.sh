@@ -6,7 +6,10 @@ NAME=${2:?container name is required}
 PUBLISH=${3:?publish address is required}
 RUNTIME_VOLUME=${4:?runtime volume is required}
 
-docker rm --force "$NAME" >/dev/null 2>&1 || true
+container_id=$(docker container ls --all --quiet --filter "name=^/${NAME}$")
+if [[ -n "$container_id" ]]; then
+  docker rm --force "$container_id" >/dev/null
+fi
 
 docker run --detach \
   --name "$NAME" \

@@ -90,6 +90,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash opencode-demo; \
     chmod 0700 /home/opencode-demo; \
     install -d -o 1001 -g 1001 -m 0755 \
+      /opt/opencode-update-cache \
       /opt/opencode-runtime \
       /opt/opencode-runtime/bin \
       /opt/opencode-runtime/install \

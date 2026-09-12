@@ -18,9 +18,9 @@ GitHub Codespace
   ├─ postStart: start-demo-sandbox
   └─ postAttach: publish-demo
              │
-             │ docker build + docker run
+             │ docker pull + updater + docker run
              ▼
-  untrusted sandbox container (local runtime overlay on :demo)
+  untrusted sandbox container (:demo + read-only runtime volume)
   ├─ uid/gid 1001
   ├─ bridge network
   ├─ read-only root filesystem
@@ -55,17 +55,19 @@ The two published runtime images are deliberately related:
             └─ Docker CLI, gh, git, SSH client, controller scripts
 ```
 
-`controller.Dockerfile` is based on the already validated `:demo` image. Pulling `:controller` therefore brings the sandbox filesystem layers into the same Docker daemon that will later start the child. `start-demo-sandbox` explicitly pulls `:demo` and uses it as the base of a small local runtime overlay, so those shared layers are reused instead of transferred again.
+`controller.Dockerfile` is based on the already validated `:demo` image. Pulling `:controller` brings that sandbox image's filesystem layers into the same Docker daemon that starts the child. `start-demo-sandbox` explicitly pulls `:demo` and resolves its local image ID for both the updater and child. Docker reuses matching layers; the moving tags can select images with different layers.
 
-The sandbox Dockerfile keeps expensive work in independent build stages. Bun is used for JavaScript package installation in disposable builder stages only. OpenCode is installed from `@opencode/cli@beta`, its postinstall-selected native `opencode2` executable is resolved, and only that executable is copied into the sandbox runtime. Production plugin dependencies are installed from `bun.lock` with lifecycle scripts disabled, and only the resulting `node_modules` tree is copied into the runtime. Bun itself, its caches, and package-manager metadata do not become child runtime dependencies.
+The sandbox Dockerfile keeps expensive work in independent build stages. OpenCode is installed from `@opencode/cli@beta` and updated with Bun during the image build. The selected native executable is copied into the image as the bootstrap executable. Production plugin dependencies are installed from `bun.lock` with lifecycle scripts disabled. The image contains Bun for the startup updater, while its persistent download cache is mounted only into the updater.
 
-OpenCode V2 follows the rolling beta channel. CI resolves `@opencode/cli@beta` for the published image, while the plugin dependency is `@opencode/plugin: "beta"`. At every Codespace start, `start-demo-sandbox` independently resolves `@opencode/cli@beta` in a disposable Bun builder, overlays only the selected native executable onto the pulled `:demo` image, verifies that executable, and then launches the child. The public sandbox therefore starts with the current OpenCode V2 beta while retaining an immutable runtime filesystem.
+CI resolves `@opencode/cli@beta` for the published image, while the plugin dependency is `@opencode/plugin: "beta"`. At every Codespace start, a disposable updater runs `opencode2 update --method bun` against a fresh runtime volume, verifies the executable and its location, and exits before the child starts. The child mounts the resulting runtime read-only.
+
+The updater uses a separate named volume at `/opt/opencode-update-cache` for Bun package downloads. Its disposable HOME contains `.bunfig.toml` with `install.cache.disableManifest = true`, so version resolution uses the registry while downloaded packages can be reused. The cache and runtime are separate volume mounts, preventing hardlinks between their files. Neither the cache nor the updater HOME is mounted into the public child. At updater entry and shell exit, a cache larger than 512 MiB is cleared. This bounds retained cache growth across completed runs, not transient installation disk usage; forced termination defers trimming until the next updater run.
 
 ## Codespace lifecycle
 
 The Dev Container lifecycle commands are orchestration hooks, not service supervisors.
 
-`postStartCommand` runs `/usr/local/bin/start-demo-sandbox`. It pulls `:demo`, creates a disposable Docker build context, resolves the current `@opencode/cli@beta` with Bun, builds and verifies the local `opencode-repl-tools-demo:runtime` overlay, removes any previous child with the fixed sandbox name, starts a detached hardened child from that runtime image, and waits until `http://127.0.0.1:7681/` responds. The hook then exits. The long-lived service remains owned by Docker, not by the Dev Container lifecycle process.
+`postStartCommand` runs `/usr/local/bin/start-demo-sandbox` under an exclusive controller-side file lock. It pulls `:demo`, resolves its local image ID, removes existing updater and child containers, and recreates the runtime volume. Listing and removal failures abort startup; absent resources are allowed. A disposable updater updates and verifies OpenCode using the updater-only download cache. The hook then starts a detached hardened child from the same image ID and waits until `http://127.0.0.1:7681/` responds. The hook exits and releases the lock. The long-lived service remains owned by Docker, not by the Dev Container lifecycle process.
 
 `postAttachCommand` runs `/usr/local/bin/publish-demo`. It waits for the local listener, runs `gh codespace ports visibility 7681:public`, verifies that GitHub reports the port as public, records the resulting URL, and opens it when a browser command is available.
 
@@ -91,6 +93,7 @@ This separation keeps container startup deterministic: service creation happens 
 - Networking uses Docker bridge mode, keeping the public process out of the controller's host network namespace.
 - Only `127.0.0.1:7681` is published, exposing the child to Codespaces forwarding without a direct external Docker bind.
 - No bind mounts are provided, keeping the checkout, Docker socket, host files, and controller state out of the child.
+- The runtime volume is mounted read-only; the updater's package-cache volume is not mounted into the child.
 - Docker's `local` log driver is limited to two 10 MiB files.
 
 The executable home tmpfs is intentional. OpenCode's Bun/OpenTUI runtime extracts native shared libraries into the session temporary directory and loads them with `dlopen`, which requires executable mappings. Arbitrary code execution is already the intended workload inside this container, so blocking executable mappings in the active session home does not create a meaningful code-execution boundary; it only prevents the TUI from functioning. `/tmp` remains `noexec` as a separate defense-in-depth control.
@@ -163,8 +166,8 @@ The implementation can be reduced to a small set of rules:
 6. Start from an immutable child image, add only bounded writable tmpfs storage, and explicitly allow executable mappings only where the native TUI runtime requires them.
 7. Sanitize the environment at every trust boundary instead of trying to delete individual secret variable names after inheritance.
 8. Bake dependencies and a source snapshot into the image; copy only disposable workspace state at session start.
-9. Resolve the rolling OpenCode V2 beta during Codespace startup in a disposable Bun builder and copy only the selected native executable into the local runtime overlay.
-10. Keep Bun, its package-manager metadata, and its caches out of the public child runtime.
+9. Update OpenCode during every Codespace startup in a disposable updater, verify the executable, and mount its runtime volume read-only into the child.
+10. Keep the updater download cache separate from runtime files and inaccessible to the public child, and resolve package versions from the registry on every update.
 11. Build the trusted controller on top of the validated sandbox image so one Codespace image pull also preloads the expensive child layers.
 12. Test the real terminal/session process in CI, not only the TCP or HTTP listener.
 13. Verify public-port visibility after readiness rather than assuming publication succeeded.
@@ -175,7 +178,7 @@ The implementation can be reduced to a small set of rules:
 - `devcontainer.json` selects the prebuilt controller, provides host networking and Docker socket access, declares port 7681, and wires lifecycle hooks.
 - `controller.Dockerfile` builds the trusted management image on top of `:demo` and adds Docker CLI, `gh`, git, SSH, and orchestration scripts.
 - `Dockerfile` uses Bun builder stages to assemble the native OpenCode executable and production plugin dependencies, then builds the hardened public sandbox runtime with ttyd, Python dependencies, and the source snapshot.
-- `start-demo-sandbox.sh` pulls `:demo`, resolves the current OpenCode beta in a disposable Bun builder, builds and verifies the local runtime overlay, recreates the child, binds it to loopback, and waits for readiness.
+- `start-demo-sandbox.sh` serializes startup, pulls `:demo`, updates OpenCode in a disposable updater with a retained package cache, verifies the runtime, recreates the child using the same image ID and a read-only runtime volume, binds it to loopback, and waits for readiness.
 - `run-demo-sandbox.sh` defines the Docker security, resource, filesystem, network, and logging boundary for public code.
 - `publish-demo.sh` makes the ready Codespaces port public, verifies visibility, and records or opens the public URL.
 - `run-demo-container.sh` sanitizes the child environment and supervises ttyd/tmux cohorts inside the sandbox.

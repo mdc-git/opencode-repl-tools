@@ -230,11 +230,13 @@ jobs:
           sandbox_name=opencode-repl-tools-demo-sandbox
           updater_name=opencode-repl-tools-demo-updater
           runtime_volume=opencode-repl-tools-demo-runtime
+          update_cache_volume=opencode-repl-tools-demo-update-cache
           cleanup() {
             docker logs "$sandbox_name" 2>/dev/null || true
             docker rm --force "$sandbox_name" >/dev/null 2>&1 || true
             docker rm --force "$updater_name" >/dev/null 2>&1 || true
             docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true
+            docker volume rm --force "$update_cache_volume" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
               docker exec "$controller_id" cat /root/.cache/opencode-repl-tools-preview.log 2>/dev/null || true
               docker logs "$controller_id" 2>/dev/null || true
@@ -269,6 +271,10 @@ jobs:
             | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$sandbox_name")" = false
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")" = "$runtime_volume"
+          test "$(docker inspect --format '{{.Image}}' "$sandbox_name")" = \
+            "$(docker image inspect --format '{{.Id}}' "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo")"
+          test -z "$(docker inspect --format '{{range .Mounts}}{{if eq .Name "opencode-repl-tools-demo-update-cache"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")"
+          docker volume inspect "$update_cache_volume" >/dev/null
           test -z "$(docker ps --filter "name=^/${updater_name}$" --format '{{.ID}}')"
 
           child_version="$(docker exec "$sandbox_name" /opt/opencode-runtime/bin/opencode2 --version)"

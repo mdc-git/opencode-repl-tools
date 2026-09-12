@@ -3,6 +3,7 @@ set -euo pipefail
 
 IMAGE=ghcr.io/mdc-git/opencode-repl-tools-demo:demo
 RUNTIME_VOLUME=opencode-repl-tools-demo-runtime
+UPDATE_CACHE_VOLUME=opencode-repl-tools-demo-update-cache
 UPDATER_NAME=opencode-repl-tools-demo-updater
 SANDBOX_NAME=opencode-repl-tools-demo-sandbox
 PORT=7681
@@ -10,12 +11,21 @@ CACHE_DIR=$HOME/.cache
 LOG=$CACHE_DIR/opencode-repl-tools-preview.log
 
 mkdir -p "$CACHE_DIR"
+exec 9>"$CACHE_DIR/opencode-repl-tools-start.lock"
+flock 9
 : >"$LOG"
+
+remove_updater() {
+  updater_id=$(docker container ls --all --quiet --filter "name=^/${UPDATER_NAME}$") || return
+  if [[ -n "$updater_id" ]]; then
+    docker rm --force "$updater_id" >>"$LOG" 2>&1
+  fi
+}
 
 cleanup() {
   status=$?
   trap - EXIT
-  docker rm --force "$UPDATER_NAME" >/dev/null 2>&1 || true
+  remove_updater || status=1
   if (( status != 0 )); then
     cat "$LOG" >&2 || true
   fi
@@ -25,11 +35,19 @@ trap cleanup EXIT
 
 echo 'Preparing OpenCode demo image...' >&2
 timeout --kill-after=5s 120s docker pull "$IMAGE" >>"$LOG" 2>&1
+IMAGE=$(docker image inspect --format '{{.Id}}' "$IMAGE")
 
-docker rm --force "$UPDATER_NAME" >/dev/null 2>&1 || true
-docker rm --force "$SANDBOX_NAME" >/dev/null 2>&1 || true
-docker volume rm --force "$RUNTIME_VOLUME" >/dev/null 2>&1 || true
+remove_updater
+sandbox_id=$(docker container ls --all --quiet --filter "name=^/${SANDBOX_NAME}$")
+if [[ -n "$sandbox_id" ]]; then
+  docker rm --force "$sandbox_id" >>"$LOG" 2>&1
+fi
+volumes=$(docker volume ls --format '{{.Name}}')
+if grep -Fxq "$RUNTIME_VOLUME" <<<"$volumes"; then
+  docker volume rm "$RUNTIME_VOLUME" >>"$LOG" 2>&1
+fi
 docker volume create "$RUNTIME_VOLUME" >/dev/null
+docker volume create "$UPDATE_CACHE_VOLUME" >/dev/null
 
 echo 'Updating OpenCode runtime...' >&2
 timeout --kill-after=5s 120s docker run --rm \
@@ -47,6 +65,7 @@ timeout --kill-after=5s 120s docker run --rm \
   --ulimit nproc=128:128 \
   --tmpfs /tmp:rw,exec,nosuid,nodev,size=256m,uid=1001,gid=1001,mode=0700 \
   --mount "type=volume,source=$RUNTIME_VOLUME,target=/opt/opencode-runtime" \
+  --mount "type=volume,source=$UPDATE_CACHE_VOLUME,target=/opt/opencode-update-cache" \
   --network bridge \
   --entrypoint /usr/bin/env \
   "$IMAGE" \
@@ -55,9 +74,20 @@ timeout --kill-after=5s 120s docker run --rm \
   BUN_INSTALL=/opt/opencode-runtime \
   BUN_INSTALL_GLOBAL_DIR=/opt/opencode-runtime/install/global \
   BUN_INSTALL_BIN=/opt/opencode-runtime/bin \
+  BUN_INSTALL_CACHE_DIR=/opt/opencode-update-cache \
   PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin \
   /bin/bash -ceu '
+    set -o pipefail
     mkdir -p "$HOME"
+    printf "[install.cache]\ndisableManifest = true\n" >"$HOME/.bunfig.toml"
+    trim_cache() {
+      cache_mib=$(du -sm "$BUN_INSTALL_CACHE_DIR" | cut -f1)
+      if (( cache_mib > 512 )); then
+        find "$BUN_INSTALL_CACHE_DIR" -mindepth 1 -delete
+      fi
+    }
+    trap trim_cache EXIT
+    trim_cache
     test -z "${GH_TOKEN:-}${GITHUB_TOKEN:-}${GITHUB_CODESPACE_TOKEN:-}"
 
     before="$(opencode2 --version)"

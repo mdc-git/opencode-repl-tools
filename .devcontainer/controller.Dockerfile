@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     grep " $archive$" /tmp/gh-checksums | sed "s# $archive# /tmp/$archive#" | sha256sum -c -; \
     tar -xzf "/tmp/$archive" -C /tmp; \
     install -m 0755 "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh; \
-    rm -rf /tmp/gh-* /tmp/gh_${GH_VERSION}_linux_amd64
+    rm -rf /tmp/gh-* /tmp/gh_${GH_VERSION}_linux_amd64 "/tmp/$archive"
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --chmod=0755 .devcontainer/run-demo-sandbox.sh /usr/local/bin/run-demo-sandbox
