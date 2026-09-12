@@ -132,8 +132,11 @@ echo 'Starting public OpenCode sandbox...' >&2
   "$RUNTIME_VOLUME" \
   >>"$LOG"
 
-for _ in $(seq 1 100); do
-  if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null; then
+deadline=$((SECONDS + 10))
+while (( (remaining = deadline - SECONDS) > 0 )); do
+  if curl -fsS --noproxy '*' --connect-timeout 1 \
+    --max-time "$((remaining < 2 ? remaining : 2))" \
+    "http://127.0.0.1:$PORT/" >/dev/null; then
     trap - EXIT
     echo 'OpenCode demo is ready.' >&2
     exit 0

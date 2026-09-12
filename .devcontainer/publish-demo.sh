@@ -5,14 +5,19 @@ PORT=7681
 LOG=$HOME/.cache/opencode-repl-tools-preview.log
 CODESPACE=${CODESPACE_NAME:?CODESPACE_NAME is not set}
 
-for _ in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+ready=false
+deadline=$((SECONDS + 30))
+while (( (remaining = deadline - SECONDS) > 0 )); do
+  if curl -fsS --noproxy '*' --connect-timeout 1 \
+    --max-time "$((remaining < 2 ? remaining : 2))" \
+    "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+    ready=true
     break
   fi
-  sleep 1
+  sleep 0.1
 done
 
-if ! curl -fsS "http://127.0.0.1:$PORT/" >/dev/null 2>&1; then
+if [[ "$ready" != true ]]; then
   echo "ttyd is not responding on port $PORT" >>"$LOG"
   exit 1
 fi

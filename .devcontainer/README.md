@@ -71,6 +71,8 @@ The Dev Container lifecycle commands are orchestration hooks, not service superv
 
 `postAttachCommand` runs `/usr/local/bin/publish-demo`. It waits for the local listener, runs `gh codespace ports visibility 7681:public`, verifies that GitHub reports the port as public, records the resulting URL, and opens it when a browser command is available.
 
+Both hooks probe the listener directly with proxy use disabled, a one-second connection timeout, and a request timeout capped at two seconds or the remaining readiness budget. Startup uses a ten-second readiness deadline; publication uses thirty seconds. Failed probes are followed by a 100 ms sleep. Publication proceeds from the first successful probe without a duplicate HTTP request.
+
 This separation keeps container startup deterministic: service creation happens when the Codespace starts, while publication happens after attach when the Codespaces/GitHub command context is available.
 
 ## Sandbox hardening
@@ -140,7 +142,7 @@ A public Codespaces port is intentionally unauthenticated. The application behin
 
 The workflow builds the sandbox, launches it with the same hardening script used in production, waits for ttyd, and then starts a real `run-demo-session` inside tmux. This verifies the OpenCode process itself rather than treating an HTTP listener as sufficient readiness. It also checks the child UID, read-only rootfs, resource limits, bridge network, private cgroup namespace, dropped capabilities, `no_new_privileges`, absence of bind mounts, absence of GitHub credential variables, absence of the Docker socket and checkout, and read-only installed content.
 
-Only after the sandbox passes those checks is `:demo` published. The workflow then builds `:controller` from that validated sandbox image, verifies its management tools, verifies that the real sandbox filesystem DiffIDs are an exact prefix of the controller filesystem layers, and publishes `:controller`. Finally, the Dev Container CLI brings up the repository configuration, exercises the startup OpenCode beta refresh, and verifies the controller host network, Docker socket, child bridge network, loopback port binding, and end-to-end listener readiness.
+Only after the sandbox passes those checks is `:demo` published. The workflow then builds `:controller` from that validated sandbox image, verifies its management tools, and verifies that the real sandbox filesystem DiffIDs are an exact prefix of the controller filesystem layers. The Dev Container CLI brings up the repository configuration, checks that the controller uses the locally built candidate image, exercises the startup OpenCode beta refresh, and verifies the controller host network, Docker socket, child bridge network, loopback port binding, and end-to-end listener readiness. Only after that smoke check passes is `:controller` published.
 
 The result is that the images consumed by Codespaces are produced ahead of time, while the OpenCode executable is refreshed at Codespace start and the same security and lifecycle assumptions are continuously exercised by CI.
 

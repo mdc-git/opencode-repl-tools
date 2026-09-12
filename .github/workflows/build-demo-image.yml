@@ -213,10 +213,6 @@ jobs:
           printf 'sandbox image bytes:   %s\n' "$(docker inspect --format '{{.Size}}' "$sandbox")"
           printf 'controller image bytes: %s\n' "$(docker inspect --format '{{.Size}}' "$controller")"
 
-      - name: Publish validated controller image
-        shell: bash
-        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
-
       - name: Install Codespaces Dev Container CLI version
         shell: bash
         run: npm install --global @devcontainers/cli@0.83.3
@@ -226,6 +222,7 @@ jobs:
         run: |
           set -euo pipefail
           result=$(mktemp)
+          controller_image=$(docker image inspect --format '{{.Id}}' "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller")
           controller_id=
           sandbox_name=opencode-repl-tools-demo-sandbox
           updater_name=opencode-repl-tools-demo-updater
@@ -258,6 +255,7 @@ jobs:
           controller_id=$(jq -r '.containerId' "$result")
           test -n "$controller_id"
           test "$controller_id" != null
+          test "$(docker inspect --format '{{.Image}}' "$controller_id")" = "$controller_image"
 
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$controller_id")" = host
           test -S /var/run/docker.sock
@@ -290,3 +288,7 @@ jobs:
           docker exec "$controller_id" \
             grep -F "OpenCode after update: $child_version" /root/.cache/opencode-repl-tools-preview.log
           printf 'child OpenCode: %s\n' "$child_version"
+
+      - name: Publish validated controller image
+        shell: bash
+        run: docker push "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:controller"
