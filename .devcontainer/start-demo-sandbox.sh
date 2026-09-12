@@ -87,6 +87,9 @@ timeout --kill-after=5s 120s docker run --rm \
     test -x "$opencode_path"
     case "$opencode_path" in
       /opt/opencode-runtime/*) ;;
+      /opt/opencode-bootstrap/opencode2)
+        test "$after" = "$before"
+        ;;
       *) exit 1 ;;
     esac
   ' >>"$LOG" 2>&1

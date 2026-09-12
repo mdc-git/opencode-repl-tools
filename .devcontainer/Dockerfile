@@ -50,9 +50,10 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     echo "OpenCode after update 3: $third"; \
     test "$second" = "$third"; \
     case "$third" in opencode\ v2.*) ;; *) echo "OpenCode updater did not converge on stable V2: $third" >&2; exit 1 ;; esac; \
-    test -x /opt/opencode-runtime/bin/opencode2; \
-    opencode_path="$(readlink -f /opt/opencode-runtime/bin/opencode2)"; \
-    case "$opencode_path" in /opt/opencode-runtime/*) ;; *) exit 1 ;; esac
+    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
+    test -x "$opencode_path"; \
+    case "$opencode_path" in /opt/opencode-runtime/*) ;; *) exit 1 ;; esac; \
+    install -D -m 0755 "$opencode_path" /opt/opencode-bootstrap/opencode2
 
 FROM bun-runtime AS node-dependencies
 WORKDIR /opt/opencode-repl-tools
@@ -83,12 +84,18 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       libatomic1 \
       libstdc++6 \
       python3 \
-      python3-venv \
       tmux \
       util-linux; \
     groupadd --gid 1001 opencode-demo; \
     useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash opencode-demo; \
     chmod 0700 /home/opencode-demo; \
+    install -d -o 1001 -g 1001 -m 0755 \
+      /opt/opencode-runtime \
+      /opt/opencode-runtime/bin \
+      /opt/opencode-runtime/install \
+      /opt/opencode-runtime/install/global; \
+    ln -s /opt/opencode-bootstrap/opencode2 /opt/opencode-runtime/bin/opencode2; \
+    chown -h 1001:1001 /opt/opencode-runtime/bin/opencode2; \
     find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -exec chmod a-s {} +; \
     find / -xdev \( -type f -o -type d \) -perm -0002 -exec chmod o-w {} +
 
@@ -96,7 +103,7 @@ FROM runtime-base AS final
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
-COPY --chown=1001:1001 --from=opencode-tooling /opt/opencode-runtime/ /opt/opencode-runtime/
+COPY --chmod=0755 --from=opencode-tooling /opt/opencode-bootstrap/opencode2 /opt/opencode-bootstrap/opencode2
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
