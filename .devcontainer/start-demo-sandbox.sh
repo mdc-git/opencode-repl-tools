@@ -7,7 +7,7 @@ SANDBOX_NAME=opencode-repl-tools-demo-sandbox
 PORT=7681
 CACHE_DIR=$HOME/.cache
 LOG=$CACHE_DIR/opencode-repl-tools-preview.log
-UPDATE_API=https://opencode.ai/update/api/beta/cli/npm
+VERSION_API=https://api.github.com/repos/anomalyco/opencode/git/matching-refs/tags/v2.
 INSTALLER_URL=https://opencode.ai/v2/install
 
 mkdir -p "$CACHE_DIR"
@@ -17,9 +17,13 @@ docker pull "$IMAGE" >>"$LOG" 2>&1
 base_id="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
 
 fetch_latest_version() {
-  local metadata version
-  metadata="$(curl -fsSL "$UPDATE_API")"
-  version="$(printf '%s' "$metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+  local refs version
+  refs="$(curl -fsSL "$VERSION_API")"
+  version="$(printf '%s' "$refs" \
+    | grep -oE '"ref":"refs/tags/v2\.[0-9]+\.[0-9]+"' \
+    | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+)"/\1/' \
+    | sort -V \
+    | tail -n 1)"
   test -n "$version"
   printf '%s\n' "$version"
 }
