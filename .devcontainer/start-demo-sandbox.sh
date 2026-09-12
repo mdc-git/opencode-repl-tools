@@ -13,61 +13,66 @@ mkdir -p "$CACHE_DIR"
 
 docker pull "$IMAGE" >>"$LOG" 2>&1
 
+tooling_root="$(mktemp -d "$CACHE_DIR/opencode-tooling.XXXXXX")"
 build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
-cleanup_build() {
+cleanup() {
   status=$?
+  trap - EXIT
   if (( status != 0 )); then
     cat "$LOG" >&2 || true
   fi
-  rm -rf "$build_context"
+  rm -rf "$tooling_root" "$build_context"
   exit "$status"
 }
-trap cleanup_build EXIT
+trap cleanup EXIT
 
+export BUN_INSTALL="$tooling_root/bun"
+export PATH="$BUN_INSTALL/bin:/usr/local/bin:/usr/bin:/bin"
+
+bun install --global --trust "@opencode/cli@beta" >>"$LOG" 2>&1
+bootstrap="$(opencode2 --version 2>>"$LOG")"
+echo "OpenCode bootstrap: $bootstrap" >>"$LOG"
+
+second=
+third=
+for pass in 1 2 3; do
+  if ! timeout 180s opencode2 update --method bun >>"$LOG" 2>&1; then
+    echo "OpenCode update pass $pass failed or timed out" >>"$LOG"
+    exit 1
+  fi
+  version="$(opencode2 --version 2>>"$LOG")"
+  echo "OpenCode after update $pass: $version" >>"$LOG"
+  case "$pass" in
+    2) second="$version" ;;
+    3) third="$version" ;;
+  esac
+done
+
+test -n "$second"
+test "$second" = "$third"
+case "$third" in
+  "opencode v2."*) ;;
+  *)
+    echo "updater did not converge on a stable V2 build: $third" >>"$LOG"
+    exit 1
+    ;;
+esac
+
+opencode_path="$(readlink -f "$(command -v opencode2)")"
+test -x "$opencode_path"
+install -m 0755 "$opencode_path" "$build_context/opencode2"
 cat >"$build_context/Dockerfile" <<'EOF'
 # syntax=docker/dockerfile:1.7
 ARG DEMO_IMAGE
-ARG BUN_IMAGE=oven/bun:1
-
-FROM ${BUN_IMAGE} AS opencode-tooling
-ARG OPENCODE_UPDATE_CACHE_KEY
-USER root
-ENV BUN_INSTALL=/opt/opencode-install \
-    PATH=/opt/opencode-install/bin:/usr/local/bin:/usr/bin:/bin \
-    HOME=/root
-RUN --mount=type=cache,target=/root/.bun/install/cache \
-    set -eux; \
-    test -n "$OPENCODE_UPDATE_CACHE_KEY"; \
-    bun install --global --trust "@opencode/cli@beta"; \
-    echo "OpenCode bootstrap: $(opencode2 --version)"; \
-    opencode2 update --method bun; \
-    echo "OpenCode after update 1: $(opencode2 --version)"; \
-    opencode2 update --method bun; \
-    second="$(opencode2 --version)"; \
-    echo "OpenCode after update 2: $second"; \
-    opencode2 update --method bun; \
-    third="$(opencode2 --version)"; \
-    echo "OpenCode after update 3: $third"; \
-    test "$second" = "$third"; \
-    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
-    test -x "$opencode_path"; \
-    install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
-    /opt/opencode/bin/opencode2 --version
-
 FROM ${DEMO_IMAGE}
-COPY --from=opencode-tooling /opt/opencode/bin/opencode2 /opt/opencode/bin/opencode2
+COPY --chmod=0755 opencode2 /opt/opencode/bin/opencode2
 EOF
 
-update_cache_key="$(date +%s%N)"
 docker build \
   --build-arg "DEMO_IMAGE=$IMAGE" \
-  --build-arg "OPENCODE_UPDATE_CACHE_KEY=$update_cache_key" \
   --tag "$RUNTIME_IMAGE" \
   "$build_context" \
   >>"$LOG" 2>&1
-
-rm -rf "$build_context"
-trap - EXIT
 
 runtime_version="$(
   docker run --rm \
@@ -80,14 +85,12 @@ runtime_version="$(
     2>>"$LOG"
 )"
 echo "runtime OpenCode: $runtime_version" >>"$LOG"
-case "$runtime_version" in
-  "opencode v2."*) ;;
-  *)
-    echo "runtime OpenCode is not a stable V2 build: $runtime_version" >>"$LOG"
-    cat "$LOG" >&2
-    exit 1
-    ;;
-esac
+test "$runtime_version" = "$third"
+
+rm -rf "$tooling_root" "$build_context"
+tooling_root=
+build_context=
+trap - EXIT
 
 /usr/local/bin/run-demo-sandbox \
   "$RUNTIME_IMAGE" \
