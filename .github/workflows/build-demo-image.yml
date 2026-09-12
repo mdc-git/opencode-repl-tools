@@ -256,8 +256,12 @@ jobs:
           docker inspect --format '{{json .HostConfig.PortBindings}}' "$sandbox_name" \
             | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
 
-          latest_metadata="$(curl -fsSL https://opencode.ai/update/api/beta/cli/npm)"
-          latest_version="$(printf '%s' "$latest_metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+          latest_refs="$(curl -fsSL https://api.github.com/repos/anomalyco/opencode/git/matching-refs/tags/v2.)"
+          latest_version="$(printf '%s' "$latest_refs" \
+            | grep -oE '"ref":"refs/tags/v2\.[0-9]+\.[0-9]+"' \
+            | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+)"/\1/' \
+            | sort -V \
+            | tail -n 1)"
           child_version="$(docker exec "$sandbox_name" /opt/opencode/bin/opencode2 --version \
             | awk '{print $NF}' \
             | sed 's/^v//')"
