@@ -32,6 +32,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
     test -n "$OPENCODE_BETA_CACHE_KEY"; \
     bun install --global --trust "@opencode/cli@beta"; \
+    opencode2 update --method bun; \
     opencode_path="$(readlink -f "$(command -v opencode2)")"; \
     test -x "$opencode_path"; \
     install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
