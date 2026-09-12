@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     chmod 1777 /tmp; \
     apt-get update; \
-    apt-get install -y --no-install-recommends curl git openssh-client; \
+    apt-get install -y --no-install-recommends curl git; \
     archive="gh_${GH_VERSION}_linux_amd64.tar.gz"; \
     base="https://github.com/cli/cli/releases/download/v${GH_VERSION}"; \
     curl -fsSL "$base/gh_${GH_VERSION}_checksums.txt" -o /tmp/gh-checksums; \
@@ -28,7 +28,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     rm -rf /tmp/gh-* /tmp/gh_${GH_VERSION}_linux_amd64
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
-COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY --chmod=0755 .devcontainer/run-demo-sandbox.sh /usr/local/bin/run-demo-sandbox
 COPY --chmod=0755 .devcontainer/start-demo-sandbox.sh /usr/local/bin/start-demo-sandbox
 COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
@@ -38,7 +37,6 @@ WORKDIR /workspaces
 RUN set -eux; \
     bun --version; \
     docker --version; \
-    docker buildx version; \
     gh --version; \
     git --version; \
     curl --version >/dev/null
