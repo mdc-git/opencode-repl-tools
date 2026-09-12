@@ -8,10 +8,22 @@ PORT=7681
 CACHE_DIR=$HOME/.cache
 LOG=$CACHE_DIR/opencode-repl-tools-preview.log
 VERSION_API=https://api.github.com/repos/anomalyco/opencode/git/matching-refs/tags/v2.
-INSTALLER_URL=https://opencode.ai/v2/install
 
 mkdir -p "$CACHE_DIR"
 : >"$LOG"
+
+build_context=
+cleanup() {
+  status=$?
+  if [[ -n "$build_context" ]]; then
+    rm -rf "$build_context"
+  fi
+  if (( status != 0 )); then
+    cat "$LOG" >&2 || true
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
 
 docker pull "$IMAGE" >>"$LOG" 2>&1
 base_id="$(docker image inspect --format '{{.Id}}' "$IMAGE")"
@@ -41,54 +53,52 @@ runtime_version() {
     | sed 's/^v//'
 }
 
+runtime_ready=false
 for attempt in 1 2 3; do
   latest_version="$(fetch_latest_version)"
+  opencode_image="ghcr.io/anomalyco/opencode:$latest_version"
   echo "latest OpenCode v2: $latest_version" >>"$LOG"
 
   cached_runtime_version="$(docker image inspect --format '{{index .Config.Labels "io.opencode.version"}}' "$RUNTIME_IMAGE" 2>/dev/null || true)"
   cached_runtime_base="$(docker image inspect --format '{{index .Config.Labels "io.opencode.base"}}' "$RUNTIME_IMAGE" 2>/dev/null || true)"
 
   if [[ "$cached_runtime_version" != "$latest_version" || "$cached_runtime_base" != "$base_id" ]]; then
-    binary="$CACHE_DIR/opencode-$latest_version"
-    if [[ ! -x "$binary" ]]; then
-      install_home="$(mktemp -d "$CACHE_DIR/opencode-install.XXXXXX")"
-      if ! curl -fsSL "$INSTALLER_URL" \
-        | HOME="$install_home" VERSION="$latest_version" bash -s -- --no-modify-path \
-          >>"$LOG" 2>&1; then
-        rm -rf "$install_home"
-        cat "$LOG" >&2
-        exit 1
-      fi
-      install -m 0755 "$install_home/.opencode/bin/opencode" "$binary"
-      rm -rf "$install_home"
-    fi
-
     build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
-    trap 'status=$?; if (( status != 0 )); then cat "$LOG" >&2 || true; fi; rm -rf "${build_context:-}"; exit "$status"' EXIT
-    install -m 0755 "$binary" "$build_context/opencode2"
-
     cat >"$build_context/Dockerfile" <<'EOF'
 # syntax=docker/dockerfile:1.7
 ARG DEMO_IMAGE
+ARG OPENCODE_IMAGE
+FROM ${OPENCODE_IMAGE} AS opencode-release
+RUN /usr/local/bin/opencode --version
+
 FROM ${DEMO_IMAGE}
 ARG OPENCODE_VERSION
 ARG OPENCODE_BASE
 LABEL io.opencode.version="$OPENCODE_VERSION" \
       io.opencode.base="$OPENCODE_BASE"
-COPY --chmod=0755 opencode2 /opt/opencode/bin/opencode2
+COPY --from=opencode-release /usr/local/bin/opencode /opt/opencode/bin/opencode2
 EOF
 
-    docker build \
+    if ! docker build \
       --build-arg "DEMO_IMAGE=$IMAGE" \
+      --build-arg "OPENCODE_IMAGE=$opencode_image" \
       --build-arg "OPENCODE_VERSION=$latest_version" \
       --build-arg "OPENCODE_BASE=$base_id" \
       --tag "$RUNTIME_IMAGE" \
       "$build_context" \
-      >>"$LOG" 2>&1
+      >>"$LOG" 2>&1; then
+      echo "failed to build runtime from $opencode_image" >>"$LOG"
+      if (( attempt == 3 )); then
+        exit 1
+      fi
+      rm -rf "$build_context"
+      build_context=
+      sleep 1
+      continue
+    fi
 
     rm -rf "$build_context"
     build_context=
-    trap - EXIT
   fi
 
   installed_version="$(runtime_version)"
@@ -101,16 +111,21 @@ EOF
 
   confirmed_latest="$(fetch_latest_version)"
   if [[ "$installed_version" == "$confirmed_latest" ]]; then
+    runtime_ready=true
     break
   fi
 
   echo "OpenCode v2 advanced during startup: $installed_version -> $confirmed_latest; refreshing" >>"$LOG"
-  if (( attempt == 3 )); then
-    echo "OpenCode v2 changed repeatedly during startup" >>"$LOG"
-    cat "$LOG" >&2
-    exit 1
+  docker image rm --force "$RUNTIME_IMAGE" >>"$LOG" 2>&1 || true
+  if (( attempt < 3 )); then
+    continue
   fi
 done
+
+if [[ "$runtime_ready" != true ]]; then
+  echo "could not prepare the latest OpenCode v2 runtime" >>"$LOG"
+  exit 1
+fi
 
 /usr/local/bin/run-demo-sandbox \
   "$RUNTIME_IMAGE" \
@@ -126,7 +141,6 @@ for _ in $(seq 1 100); do
   if [[ "$(docker inspect --format '{{.State.Running}}' "$SANDBOX_NAME" 2>/dev/null || true)" != true ]]; then
     docker logs "$SANDBOX_NAME" >>"$LOG" 2>&1 || true
     echo "demo sandbox exited before ttyd became ready" >>"$LOG"
-    cat "$LOG" >&2
     exit 1
   fi
 
@@ -135,5 +149,4 @@ done
 
 docker logs "$SANDBOX_NAME" >>"$LOG" 2>&1 || true
 echo "demo sandbox did not become ready on port $PORT" >>"$LOG"
-cat "$LOG" >&2
 exit 1
