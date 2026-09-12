@@ -176,6 +176,7 @@ jobs:
           trap 'rm -rf "$layer_dir"' EXIT
 
           docker run --rm "$controller" sh -ceu '
+            bun --version
             docker --version
             gh --version
             git --version
@@ -215,6 +216,7 @@ jobs:
             docker logs "$sandbox_name" 2>/dev/null || true
             docker rm --force "$sandbox_name" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
+              docker exec "$controller_id" cat "$HOME/.cache/opencode-repl-tools-preview.log" 2>/dev/null || true
               docker logs "$controller_id" 2>/dev/null || true
               docker rm --force "$controller_id" >/dev/null 2>&1 || true
             fi
