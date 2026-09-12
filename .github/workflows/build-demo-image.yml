@@ -216,7 +216,7 @@ jobs:
             docker logs "$sandbox_name" 2>/dev/null || true
             docker rm --force "$sandbox_name" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
-              docker exec "$controller_id" cat "$HOME/.cache/opencode-repl-tools-preview.log" 2>/dev/null || true
+              docker exec "$controller_id" cat /root/.cache/opencode-repl-tools-preview.log 2>/dev/null || true
               docker logs "$controller_id" 2>/dev/null || true
               docker rm --force "$controller_id" >/dev/null 2>&1 || true
             fi
@@ -255,3 +255,13 @@ jobs:
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$sandbox_name")" = bridge
           docker inspect --format '{{json .HostConfig.PortBindings}}' "$sandbox_name" \
             | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
+
+          latest_metadata="$(curl -fsSL https://opencode.ai/update/api/beta/cli/npm)"
+          latest_version="$(printf '%s' "$latest_metadata" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')"
+          child_version="$(docker exec "$sandbox_name" /opt/opencode/bin/opencode2 --version \
+            | awk '{print $NF}' \
+            | sed 's/^v//')"
+          test -n "$latest_version"
+          printf 'latest OpenCode v2: %s\n' "$latest_version"
+          printf 'child OpenCode v2:  %s\n' "$child_version"
+          test "$child_version" = "$latest_version"
