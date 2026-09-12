@@ -4,7 +4,7 @@ ARG NODE_IMAGE=node:26.8.2-bookworm-slim
 ARG BUN_IMAGE=oven/bun:1
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
-ARG OPENCODE_BETA_CACHE_KEY=local
+ARG OPENCODE_UPDATE_CACHE_KEY=local
 
 FROM ${NODE_IMAGE} AS node-runtime
 
@@ -30,25 +30,32 @@ RUN set -eux; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
 
 FROM bun-runtime AS opencode-tooling
-ARG OPENCODE_BETA_CACHE_KEY
-ENV BUN_INSTALL=/opt/opencode-install \
-    PATH=/opt/opencode-install/bin:/usr/local/bin:/usr/bin:/bin
+ARG OPENCODE_UPDATE_CACHE_KEY
+ENV BUN_INSTALL=/opt/opencode-runtime \
+    PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
-    test -n "$OPENCODE_BETA_CACHE_KEY"; \
+    test -n "$OPENCODE_UPDATE_CACHE_KEY"; \
     bun install --global --trust "@opencode/cli@beta"; \
+    echo "OpenCode bootstrap: $(opencode2 --version)"; \
+    opencode2 update --method bun; \
+    echo "OpenCode after update 1: $(opencode2 --version)"; \
+    opencode2 update --method bun; \
+    second="$(opencode2 --version)"; \
+    echo "OpenCode after update 2: $second"; \
+    opencode2 update --method bun; \
+    third="$(opencode2 --version)"; \
+    echo "OpenCode after update 3: $third"; \
+    test "$second" = "$third"; \
+    case "$third" in opencode\ v2.*) ;; *) echo "OpenCode updater did not converge on stable V2: $third" >&2; exit 1 ;; esac; \
     opencode_path="$(readlink -f "$(command -v opencode2)")"; \
-    test -x "$opencode_path"; \
-    install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
-    /opt/opencode/bin/opencode2 --version
+    test -x "$opencode_path"
 
 FROM bun-runtime AS node-dependencies
-ARG OPENCODE_BETA_CACHE_KEY
 WORKDIR /opt/opencode-repl-tools
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
-    test -n "$OPENCODE_BETA_CACHE_KEY"; \
     bun install --production --frozen-lockfile --ignore-scripts
 
 FROM tooling-base AS python-dependencies
@@ -84,8 +91,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 FROM runtime-base AS final
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
-COPY --from=opencode-tooling /opt/opencode/bin/opencode2 /opt/opencode/bin/opencode2
+COPY --chown=1001:1001 --from=opencode-tooling /opt/opencode-runtime/ /opt/opencode-runtime/
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container

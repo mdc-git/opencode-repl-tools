@@ -12,6 +12,6 @@
       "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "mkdir -p \"$HOME/.cache\" && setsid --fork /usr/local/bin/start-demo-sandbox </dev/null >/dev/null 2>&1",
+  "postStartCommand": "/usr/local/bin/start-demo-sandbox",
   "postAttachCommand": "/usr/local/bin/publish-demo"
 }

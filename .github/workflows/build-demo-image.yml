@@ -49,7 +49,7 @@ jobs:
           push: false
           tags: ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo
           build-args: |
-            OPENCODE_BETA_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
+            OPENCODE_UPDATE_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
           cache-from: type=gha,scope=sandbox
           cache-to: type=gha,mode=max,scope=sandbox
           provenance: false
@@ -60,9 +60,12 @@ jobs:
           set -euo pipefail
           image="ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo"
           name=opencode-repl-tools-demo-smoke
+          runtime_volume=opencode-repl-tools-demo-smoke-runtime
 
-          .devcontainer/run-demo-sandbox.sh "$image" "$name" "127.0.0.1:7681"
-          trap 'docker logs "$name" || true; docker rm --force "$name" >/dev/null 2>&1 || true' EXIT
+          docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true
+          docker volume create "$runtime_volume" >/dev/null
+          .devcontainer/run-demo-sandbox.sh "$image" "$name" "127.0.0.1:7681" "$runtime_volume"
+          trap 'docker logs "$name" || true; docker rm --force "$name" >/dev/null 2>&1 || true; docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true' EXIT
 
           for _ in $(seq 1 100); do
             if curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null; then
@@ -77,10 +80,20 @@ jobs:
 
           curl --fail --silent --show-error http://127.0.0.1:7681/ >/dev/null
 
+          seed_version="$(docker exec "$name" /opt/opencode-runtime/bin/opencode2 --version)"
+          case "$seed_version" in
+            "opencode v2."*) ;;
+            *)
+              echo "baked OpenCode seed is not a stable V2 build: $seed_version" >&2
+              exit 1
+              ;;
+          esac
+          printf 'baked OpenCode seed: %s\n' "$seed_version"
+
           docker exec "$name" sh -ceu '
             export HOME=/home/opencode-demo
             export TMUX_TMPDIR=$HOME/tmux
-            export PATH=/usr/local/bin:/usr/bin:/bin
+            export PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin
 
             tmux new-session -d -s opencode-smoke /bin/sh
             tmux set-option -w -t opencode-smoke remain-on-exit on
@@ -105,6 +118,8 @@ jobs:
           test "$(docker inspect --format '{{.HostConfig.NanoCpus}}' "$name")" = 2000000000
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$name")" = bridge
           test "$(docker inspect --format '{{.HostConfig.CgroupnsMode}}' "$name")" = private
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$name")" = false
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$name")" = "$runtime_volume"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
           docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name" | grep -Eq 'no-new-privileges'
           test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$name")" = null
@@ -121,7 +136,7 @@ jobs:
           docker exec "$name" test ! -e /usr/local/bin/publish-demo
           docker exec "$name" test -r /opt/opencode-demo/source/package.json
           docker exec "$name" test ! -w /opt/opencode-demo/source/package.json
-          docker exec "$name" test ! -w /opt/opencode/bin/opencode2
+          docker exec "$name" test ! -w /opt/opencode-runtime/bin/opencode2
           docker exec "$name" test ! -w /opt/opencode-repl-tools/node_modules
           docker exec "$name" test ! -w /opt/opencode-repl-cache
           docker exec "$name" sh -ceu 'test ! -w /; test -w "$HOME"; test -w /tmp'
@@ -184,6 +199,7 @@ jobs:
             test -x /usr/local/bin/run-demo-sandbox
             test -x /usr/local/bin/start-demo-sandbox
             test -x /usr/local/bin/publish-demo
+            test -x /opt/opencode-runtime/bin/opencode2
           '
 
           docker inspect --format '{{range .RootFS.Layers}}{{println .}}{{end}}' "$sandbox" \
@@ -212,9 +228,13 @@ jobs:
           result=$(mktemp)
           controller_id=
           sandbox_name=opencode-repl-tools-demo-sandbox
+          updater_name=opencode-repl-tools-demo-updater
+          runtime_volume=opencode-repl-tools-demo-runtime
           cleanup() {
             docker logs "$sandbox_name" 2>/dev/null || true
             docker rm --force "$sandbox_name" >/dev/null 2>&1 || true
+            docker rm --force "$updater_name" >/dev/null 2>&1 || true
+            docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true
             if [[ -n "$controller_id" ]]; then
               docker exec "$controller_id" cat /root/.cache/opencode-repl-tools-preview.log 2>/dev/null || true
               docker logs "$controller_id" 2>/dev/null || true
@@ -224,11 +244,15 @@ jobs:
           }
           trap cleanup EXIT
 
+          started=$SECONDS
           devcontainer up \
             --workspace-folder "$PWD" \
             --remove-existing-container \
             --skip-post-attach \
             >"$result"
+          startup_seconds=$((SECONDS - started))
+          printf 'Codespaces controller startup seconds: %s\n' "$startup_seconds"
+
           controller_id=$(jq -r '.containerId' "$result")
           test -n "$controller_id"
           test "$controller_id" != null
@@ -237,26 +261,17 @@ jobs:
           test -S /var/run/docker.sock
           docker exec "$controller_id" test -S /var/run/docker.sock
 
-          for _ in $(seq 1 300); do
-            if docker exec "$controller_id" curl --fail --silent --show-error \
-                http://127.0.0.1:7681/ >/dev/null 2>&1; then
-              break
-            fi
-            if ! docker inspect --format '{{.State.Running}}' "$controller_id" | grep -qx true; then
-              echo 'demo controller exited before port 7681 became ready' >&2
-              exit 1
-            fi
-            sleep 0.1
-          done
-
           docker exec "$controller_id" curl --fail --silent --show-error \
             http://127.0.0.1:7681/ >/dev/null
           docker inspect --format '{{.State.Running}}' "$sandbox_name" | grep -qx true
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$sandbox_name")" = bridge
           docker inspect --format '{{json .HostConfig.PortBindings}}' "$sandbox_name" \
             | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$sandbox_name")" = false
+          test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")" = "$runtime_volume"
+          test -z "$(docker ps --filter "name=^/${updater_name}$" --format '{{.ID}}')"
 
-          child_version="$(docker exec "$sandbox_name" /opt/opencode/bin/opencode2 --version)"
+          child_version="$(docker exec "$sandbox_name" /opt/opencode-runtime/bin/opencode2 --version)"
           case "$child_version" in
             "opencode v2."*) ;;
             *)
@@ -265,7 +280,7 @@ jobs:
               ;;
           esac
           docker exec "$controller_id" \
-            grep -F "OpenCode after update 2: $child_version" /root/.cache/opencode-repl-tools-preview.log
+            grep -F "OpenCode before update: " /root/.cache/opencode-repl-tools-preview.log
           docker exec "$controller_id" \
-            grep -F "OpenCode after update 3: $child_version" /root/.cache/opencode-repl-tools-preview.log
+            grep -F "OpenCode after update: $child_version" /root/.cache/opencode-repl-tools-preview.log
           printf 'child OpenCode: %s\n' "$child_version"

@@ -8,6 +8,7 @@ WORKSPACE=$SESSION_HOME/workspace
 TMPDIR=$SESSION_HOME/tmp
 DEMO_SOURCE=/opt/opencode-demo/source
 PYTHON_CACHE=/opt/opencode-repl-cache/opencode/repl-tools/python
+OPENCODE_RUNTIME=/opt/opencode-runtime
 
 umask 077
 
@@ -34,7 +35,7 @@ exec env -i \
   LOGNAME=opencode-demo \
   SHELL=/bin/bash \
   LANG=C.UTF-8 \
-  PATH=/usr/local/bin:/usr/bin:/bin \
+  PATH="$OPENCODE_RUNTIME/bin:/usr/local/bin:/usr/bin:/bin" \
   OPENCODE_REPL_NODE=/usr/local/bin/node \
   OPENCODE_REPL_PYTHON=/usr/bin/python3 \
-  /opt/opencode/bin/opencode2 --standalone "$WORKSPACE"
+  "$OPENCODE_RUNTIME/bin/opencode2" --standalone "$WORKSPACE"

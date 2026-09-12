@@ -4,6 +4,7 @@ set -euo pipefail
 IMAGE=${1:?demo image is required}
 NAME=${2:?container name is required}
 PUBLISH=${3:?publish address is required}
+RUNTIME_VOLUME=${4:?runtime volume is required}
 
 docker rm --force "$NAME" >/dev/null 2>&1 || true
 
@@ -22,6 +23,7 @@ docker run --detach \
   --ulimit nproc=128:128 \
   --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=1001,gid=1001,mode=0700 \
+  --mount "type=volume,source=$RUNTIME_VOLUME,target=/opt/opencode-runtime,readonly" \
   --network bridge \
   --publish "${PUBLISH}:7681" \
   --log-driver local \

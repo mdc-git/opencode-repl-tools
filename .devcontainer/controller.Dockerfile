@@ -2,12 +2,9 @@
 
 ARG DEMO_IMAGE=ghcr.io/mdc-git/opencode-repl-tools-demo:demo
 ARG DOCKER_CLI_IMAGE=docker:29-cli
-ARG BUN_IMAGE=oven/bun:1
 ARG GH_VERSION=2.100.0
 
 FROM ${DOCKER_CLI_IMAGE} AS docker-cli
-
-FROM ${BUN_IMAGE} AS bun-runtime
 
 FROM ${DEMO_IMAGE}
 ARG GH_VERSION
@@ -32,7 +29,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
-COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --chmod=0755 .devcontainer/run-demo-sandbox.sh /usr/local/bin/run-demo-sandbox
 COPY --chmod=0755 .devcontainer/start-demo-sandbox.sh /usr/local/bin/start-demo-sandbox
 COPY --chmod=0755 .devcontainer/publish-demo.sh /usr/local/bin/publish-demo
