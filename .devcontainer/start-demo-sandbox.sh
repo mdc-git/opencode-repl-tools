@@ -32,7 +32,7 @@ fetch_latest_version() {
   local refs version
   refs="$(curl -fsSL "$VERSION_API")"
   version="$(printf '%s' "$refs" \
-    | grep -oE '"ref":"refs/tags/v2\.[0-9]+\.[0-9]+"' \
+    | grep -oE '"ref"[[:space:]]*:[[:space:]]*"refs/tags/v2\.[0-9]+\.[0-9]+"' \
     | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+)"/\1/' \
     | sort -V \
     | tail -n 1)"
