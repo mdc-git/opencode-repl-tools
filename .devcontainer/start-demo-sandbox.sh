@@ -2,6 +2,7 @@
 set -euo pipefail
 
 IMAGE=ghcr.io/mdc-git/opencode-repl-tools-demo:demo
+RUNTIME_IMAGE=opencode-repl-tools-demo:runtime
 SANDBOX_NAME=opencode-repl-tools-demo-sandbox
 PORT=7681
 CACHE_DIR=$HOME/.cache
@@ -12,8 +13,50 @@ mkdir -p "$CACHE_DIR"
 
 docker pull "$IMAGE" >>"$LOG" 2>&1
 
+build_context="$(mktemp -d "$CACHE_DIR/opencode-runtime.XXXXXX")"
+trap 'rm -rf "$build_context"' EXIT
+
+cat >"$build_context/Dockerfile" <<'EOF'
+# syntax=docker/dockerfile:1.7
+
+ARG DEMO_IMAGE
+ARG BUN_IMAGE=oven/bun:1
+ARG OPENCODE_BETA_CACHE_KEY
+
+FROM ${BUN_IMAGE} AS opencode-tooling
+USER root
+ARG OPENCODE_BETA_CACHE_KEY
+ENV BUN_INSTALL=/opt/opencode-install \
+    PATH=/opt/opencode-install/bin:/usr/local/bin:/usr/bin:/bin
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    set -eux; \
+    test -n "$OPENCODE_BETA_CACHE_KEY"; \
+    bun install --global --trust "@opencode/cli@beta"; \
+    opencode_path="$(readlink -f "$(command -v opencode2)")"; \
+    test -x "$opencode_path"; \
+    install -D -m 0755 "$opencode_path" /opt/opencode/bin/opencode2; \
+    /opt/opencode/bin/opencode2 --version
+
+FROM ${DEMO_IMAGE}
+COPY --from=opencode-tooling /opt/opencode/bin/opencode2 /opt/opencode/bin/opencode2
+EOF
+
+docker build \
+  --pull \
+  --build-arg "DEMO_IMAGE=$IMAGE" \
+  --build-arg "OPENCODE_BETA_CACHE_KEY=$(date +%s%N)" \
+  --tag "$RUNTIME_IMAGE" \
+  "$build_context" \
+  >>"$LOG" 2>&1
+
+docker run --rm \
+  --entrypoint /opt/opencode/bin/opencode2 \
+  "$RUNTIME_IMAGE" \
+  --version \
+  >>"$LOG" 2>&1
+
 /usr/local/bin/run-demo-sandbox \
-  "$IMAGE" \
+  "$RUNTIME_IMAGE" \
   "$SANDBOX_NAME" \
   "127.0.0.1:$PORT" \
   >>"$LOG"
