@@ -27,10 +27,11 @@ ulimit -u 128
 
 while true; do
   rm -rf "$SESSION_ROOT"
-  install -d -o 1001 -g 1001 -m 0700 "$SESSION_HOME" "$WORKSPACE"
+  install -d -o 1001 -g 1001 -m 0700 "$SESSION_HOME"
+  install -d -m 0700 "$WORKSPACE"
   cp -a "$DEMO_SOURCE/." "$WORKSPACE/"
-  chown -R 1001:1001 "$WORKSPACE"
   chmod -R u+rwX,go-rwx "$WORKSPACE"
+  chown -R 1001:1001 "$WORKSPACE"
   ln -s /opt/opencode-repl-tools/node_modules "$WORKSPACE/node_modules"
 
   /usr/local/bin/opencode-ephemeral "$WORKSPACE" \
