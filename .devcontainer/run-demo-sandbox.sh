@@ -41,3 +41,30 @@ docker run --detach \
   --log-opt max-size=10m \
   --log-opt max-file=2 \
   "$IMAGE"
+
+docker inspect --format \
+  'demo security config: user={{.Config.User}} readonly={{.HostConfig.ReadonlyRootfs}} privileged={{.HostConfig.Privileged}} pids={{.HostConfig.PidsLimit}} memory={{.HostConfig.Memory}} nanocpus={{.HostConfig.NanoCpus}} network={{.HostConfig.NetworkMode}} cgroupns={{.HostConfig.CgroupnsMode}} binds={{json .HostConfig.Binds}} capdrop={{json .HostConfig.CapDrop}} capadd={{json .HostConfig.CapAdd}} security={{json .HostConfig.SecurityOpt}}' \
+  "$NAME" >&2
+docker inspect --format \
+  'demo runtime mount: name={{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}} rw={{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' \
+  "$NAME" >&2
+
+for _ in $(seq 1 100); do
+  if ttyd_status="$(docker exec "$NAME" sh -ceu '
+    for proc in /proc/[0-9]*; do
+      if [ "$(cat "$proc/comm" 2>/dev/null || true)" != ttyd ]; then
+        continue
+      fi
+      grep -E "^(Name|Uid|NoNewPrivs|CapInh|CapPrm|CapEff|CapBnd|CapAmb):" "$proc/status"
+      exit 0
+    done
+    exit 1
+  ' 2>/dev/null)"; then
+    printf '%s\n' 'demo ttyd security status:' "$ttyd_status" >&2
+    break
+  fi
+  if ! docker inspect --format '{{.State.Running}}' "$NAME" | grep -qx true; then
+    break
+  fi
+  sleep 0.1
+done
