@@ -58,6 +58,7 @@ bwrap \
   --symlink usr/lib64 /lib64 \
   "${system_mounts[@]}" \
   --ro-bind /sys /sys \
+  --tmpfs /tmp \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/tmux" /tmp/tmux \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
@@ -65,7 +66,6 @@ bwrap \
   --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
   --bind "$workspace" "$sandbox_workspace" \
-  --tmpfs /tmp \
   --dev /dev \
   --proc /proc \
   --clearenv \
