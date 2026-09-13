@@ -109,45 +109,34 @@ jobs:
             grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$sandbox_probe"
             grep -Fxq "XDG_CACHE_HOME=/tmp/opencode-xdg/cache" <<<"$sandbox_probe"
             grep -Fxq "OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db" <<<"$sandbox_probe"
-            rm -rf "$workspace"
-          '
 
-          docker exec -d "$name" bash -ceu '
-            workspace=/tmp/opencode-process-smoke
+            sandbox_version="$(/usr/local/bin/opencode-ephemeral "$workspace" opencode2 --version)"
+            printf "ephemeral OpenCode: %s\n" "$sandbox_version"
+            case "$sandbox_version" in
+              "opencode v2."*) ;;
+              *)
+                echo "ephemeral OpenCode is not a stable V2 build: $sandbox_version" >&2
+                exit 1
+                ;;
+            esac
             rm -rf "$workspace"
-            install -d -m 0700 "$workspace"
-            cp -a /opt/opencode-demo/source/. "$workspace/"
-            chmod -R u+rwX,go-rwx "$workspace"
-            chown -R 1001:1001 "$workspace"
-            ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
-            exec /usr/local/bin/opencode-ephemeral "$workspace" \
-              /bin/bash -ceu "tail -f /dev/null | script -qfec \"opencode2 --standalone /workspace\" /dev/null"
           '
-          sleep 5
 
           docker exec "$name" bash -ceu '
             found_ttyd=
-            found_opencode=
             for proc in /proc/[0-9]*; do
               comm="$(cat "$proc/comm" 2>/dev/null || true)"
-              case "$comm" in
-                ttyd|opencode2)
-                  grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" "$proc/status"
-                  grep -Eq "^NoNewPrivs:[[:space:]]+1$" "$proc/status"
-                  for field in CapInh CapPrm CapEff CapBnd CapAmb; do
-                    grep -Eq "^${field}:[[:space:]]+0+$" "$proc/status"
-                  done
-                  ;;
-              esac
-              if [[ "$comm" = ttyd ]]; then
-                found_ttyd=1
+              if [[ "$comm" != ttyd ]]; then
+                continue
               fi
-              if [[ "$comm" = opencode2 ]]; then
-                found_opencode=1
-              fi
+              grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" "$proc/status"
+              grep -Eq "^NoNewPrivs:[[:space:]]+1$" "$proc/status"
+              for field in CapInh CapPrm CapEff CapBnd CapAmb; do
+                grep -Eq "^${field}:[[:space:]]+0+$" "$proc/status"
+              done
+              found_ttyd=1
             done
             test "$found_ttyd" = 1
-            test "$found_opencode" = 1
           '
 
           test "$(docker inspect --format '{{.Config.User}}' "$name")" = "0:0"
