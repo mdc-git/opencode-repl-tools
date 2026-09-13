@@ -110,7 +110,7 @@ jobs:
             chown -R 1001:1001 "$workspace"
             ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
             exec /usr/local/bin/opencode-ephemeral "$workspace" \
-              /bin/bash -ceu "tail -f /dev/null | script -qfec 'opencode2 --standalone /workspace' /dev/null"
+              /bin/bash -ceu "tail -f /dev/null | script -qfec \"opencode2 --standalone /workspace\" /dev/null"
           '
           sleep 5
 
