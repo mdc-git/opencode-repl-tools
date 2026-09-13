@@ -8,7 +8,7 @@ fi
 
 workspace="$(readlink -f "${1:?workspace is required}")"
 shift
-opencode_bin="$(readlink -f "$(command -v opencode2)")"
+opencode_bin="$(readlink -f /opt/opencode-runtime/bin/opencode2)"
 python_cache=/opt/opencode-repl-cache/opencode/repl-tools/python
 sandbox_workspace=/workspace
 state_root="$(mktemp -d /tmp/opencode-ephemeral.XXXXXX)"
