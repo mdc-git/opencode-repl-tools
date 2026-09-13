@@ -18,8 +18,8 @@ done
 
 bwrap \
   --die-with-parent \
-  --unshare-user \
-  --disable-userns \
+  --unshare-all \
+  --share-net \
   --tmpfs / \
   --ro-bind /usr /usr \
   --ro-bind /opt /opt \
@@ -29,7 +29,6 @@ bwrap \
   --symlink usr/lib64 /lib64 \
   "${system_mounts[@]}" \
   --ro-bind /sys /sys \
-  --ro-bind /proc /proc \
   --perms 0700 \
   --dir "$HOME" \
   --dir /run/user \
@@ -48,6 +47,7 @@ bwrap \
   --dir "$workspace" \
   --bind "$workspace" "$workspace" \
   --dev /dev \
+  --proc /proc \
   --clearenv \
   --setenv HOME "$HOME" \
   --setenv USER "${USER:-opencode-demo}" \
