@@ -17,6 +17,8 @@ docker run --detach \
   --read-only \
   --cap-drop ALL \
   --security-opt no-new-privileges:true \
+  --security-opt seccomp=unconfined \
+  --security-opt apparmor=unconfined \
   --cgroupns private \
   --pids-limit 128 \
   --memory 2g \
