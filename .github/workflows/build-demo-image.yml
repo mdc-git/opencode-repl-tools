@@ -152,7 +152,7 @@ jobs:
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
           cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$name")"
           for capability in CHOWN DAC_OVERRIDE SETGID SETPCAP SETUID SYS_ADMIN; do
-            grep -Fq "\"$capability\"" <<<"$cap_add"
+            grep -Fq "\"CAP_$capability\"" <<<"$cap_add"
           done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
@@ -309,7 +309,7 @@ jobs:
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$sandbox_name" | grep -Eq '"ALL"'
           cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$sandbox_name")"
           for capability in CHOWN DAC_OVERRIDE SETGID SETPCAP SETUID SYS_ADMIN; do
-            grep -Fq "\"$capability\"" <<<"$cap_add"
+            grep -Fq "\"CAP_$capability\"" <<<"$cap_add"
           done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$sandbox_name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
