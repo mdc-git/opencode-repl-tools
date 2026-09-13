@@ -80,6 +80,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
+      bubblewrap \
       ca-certificates \
       libatomic1 \
       libstdc++6 \
@@ -107,6 +108,7 @@ COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
 COPY --chmod=0755 --from=opencode-tooling /opt/opencode-bootstrap/opencode2 /opt/opencode-bootstrap/opencode2
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
+COPY --chmod=0755 .devcontainer/opencode-ephemeral.sh /usr/local/bin/opencode-ephemeral
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
 COPY --chmod=0755 .devcontainer/run-demo-session.sh /usr/local/bin/run-demo-session
 COPY package.json bun.lock README.md /opt/opencode-demo/source/
