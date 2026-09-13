@@ -105,8 +105,9 @@ jobs:
           docker exec -d "$name" bash -ceu '
             workspace=/tmp/opencode-process-smoke
             rm -rf "$workspace"
-            install -d -o 1001 -g 1001 -m 0700 "$workspace"
+            install -d -m 0700 "$workspace"
             cp -a /opt/opencode-demo/source/. "$workspace/"
+            chmod -R u+rwX,go-rwx "$workspace"
             chown -R 1001:1001 "$workspace"
             ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
             exec /usr/local/bin/opencode-ephemeral "$workspace" \
