@@ -25,7 +25,6 @@ install -d -o 1001 -g 1001 -m 0700 \
   "$state_root/home/.local/share/opencode/log" \
   "$state_root/home/.local/state/opencode" \
   "$state_root/home/.cache/opencode" \
-  "$state_root/run-user" \
   "$state_root/xdg" \
   "$state_root/xdg/bin" \
   "$state_root/xdg/config/opencode" \
@@ -66,16 +65,14 @@ bwrap \
   --ro-bind /sys /sys \
   --perms 1777 \
   --tmpfs /tmp \
-  --dir /run \
   --dir /run/user \
-  --bind "$state_root/run-user" /run/user/1001 \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
   --ro-bind "$opencode_bin" /tmp/opencode-xdg/bin/opencode2 \
   --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
   --bind "$workspace" "$sandbox_workspace" \
-  --dev-bind /dev /dev \
+  --dev /dev \
   --proc /proc \
   --cap-add CAP_SETGID \
   --cap-add CAP_SETPCAP \
@@ -88,7 +85,6 @@ bwrap \
   --setenv TERM "${TERM:-xterm-256color}" \
   --setenv LANG C.UTF-8 \
   --setenv TMPDIR /tmp \
-  --setenv XDG_RUNTIME_DIR /run/user/1001 \
   --setenv XDG_CONFIG_HOME /tmp/opencode-xdg/config \
   --setenv OPENCODE_CONFIG_DIR /tmp/opencode-xdg/config/opencode \
   --setenv XDG_DATA_HOME /tmp/opencode-xdg/data \
