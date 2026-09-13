@@ -1,6 +1,6 @@
 # Public Codespaces demo architecture
 
-This directory implements the public browser demo for OpenCode REPL Tools. Visitors can execute arbitrary code through OpenCode, so the GitHub Codespace is the trusted controller and the public TUI runs in a separate untrusted Docker container.
+This directory implements the public browser demo for OpenCode REPL Tools. The GitHub Codespace is the trusted controller. Visitor-controlled terminal processes run only inside a nested Bubblewrap sandbox in a separate Docker child.
 
 ## Architecture
 
@@ -8,82 +8,69 @@ This directory implements the public browser demo for OpenCode REPL Tools. Visit
 GitHub Codespace
 
   trusted controller container
-  ├─ root user
   ├─ host network
-  ├─ host Docker socket
+  ├─ Docker socket
   ├─ GitHub/Codespaces authentication
-  ├─ gh + Docker CLI
-  ├─ postStart: start-demo-sandbox
-  └─ postAttach: publish-demo
+  └─ start-demo-sandbox
              │
-             │ docker pull + updater + docker run
              ▼
-  untrusted sandbox container
-  ├─ uid/gid 1001
+  Docker child: trusted sandbox supervisor
+  ├─ uid 0
   ├─ read-only root filesystem
-  ├─ no Linux capabilities
+  ├─ capabilities: SYS_ADMIN only
   ├─ no_new_privileges
+  ├─ private cgroup namespace
   ├─ bridge network
-  ├─ no bind mounts
+  ├─ no host bind mounts
   ├─ no Docker socket
   ├─ no GitHub credentials
-  ├─ read-only OpenCode runtime volume
-  └─ ttyd → tmux → run-demo-session
-                         │
-                         ▼
-                    Bubblewrap
-                    ├─ fresh mount, PID, IPC, UTS, cgroup, and user namespaces
-                    ├─ shared outer network namespace
-                    ├─ tmpfs root and OpenCode XDG state
-                    ├─ read-only system/runtime assets
-                    ├─ writable disposable workspace only
-                    └─ OpenCode V2
-             │
-             │ 127.0.0.1:7681 on the Codespace host
-             ▼
-  GitHub Codespaces port forwarding
+  └─ run-demo-container
              │
              ▼
-  public HTTPS browser URL
+  Bubblewrap security boundary
+  ├─ fresh mount, PID, IPC, UTS, and cgroup namespaces
+  ├─ shared Docker-child network namespace
+  ├─ tmpfs root and writable /tmp
+  ├─ uid/gid 1001
+  ├─ no Linux capabilities
+  ├─ no_new_privileges
+  ├─ disposable home and OpenCode XDG state
+  ├─ disposable writable /workspace
+  ├─ read-only system/runtime assets
+  └─ ttyd → tmux → OpenCode V2
+             │
+             ▼
+  127.0.0.1:7681 → GitHub Codespaces port forwarding
 ```
 
-`devcontainer.json` selects the prebuilt controller image. The controller owns Docker and GitHub authority and starts the public child. The child publishes only port 7681 to host loopback; Codespaces provides the external HTTPS endpoint.
+The controller owns Docker and GitHub authority. The Docker child has only the authority required to construct the Bubblewrap boundary; it does not expose a shell or terminal before the privilege drop. The public HTTP terminal, tmux server, OpenCode process, plugin code, and visitor commands all run as uid/gid 1001 with an empty capability set inside Bubblewrap.
 
 ## Image and runtime model
 
-The sandbox image contains:
+The demo image contains the OpenCode bootstrap executable, Bun, Bubblewrap 0.12.0, ttyd, tmux, Node.js, Python, production plugin dependencies, a read-only prebuilt Python REPL environment, and a source snapshot containing `.opencode` and the plugin source.
 
-- the OpenCode bootstrap executable and Bun runtime
-- Bubblewrap
-- ttyd and tmux
-- Node.js and Python
-- production plugin dependencies
-- a read-only prebuilt Python REPL environment
-- a source snapshot containing `.opencode`, the plugin source, package metadata, and documentation
+Bubblewrap 0.12.0 is built from its pinned upstream release tarball with the published SHA-256. The runtime does not use a setuid Bubblewrap executable.
 
-At Codespace start, `start-demo-sandbox.sh` pulls the demo image, recreates the OpenCode runtime volume, and runs a disposable updater. The updater executes `opencode2 update --method bun`, verifies the resulting V2 executable, and exits. The public child mounts that runtime volume read-only.
+At Codespace start, `start-demo-sandbox.sh` pulls the demo image, recreates the OpenCode runtime volume, and runs a disposable updater. The updater executes `opencode2 update --method bun`, verifies the resulting V2 executable, and exits. The Docker child mounts that runtime volume read-only. A separate Bun download-cache volume is available only to the updater.
 
-The updater has a separate persistent Bun download-cache volume. Its HOME is disposable and the cache is not mounted into the public child.
+## Docker child
 
-## Public child hardening
+`run-demo-sandbox.sh` starts the child with:
 
-`run-demo-sandbox.sh` creates the untrusted child with these controls:
-
-- user `1001:1001`
+- uid/gid `0:0` for the trusted supervisor
 - read-only root filesystem
-- all Linux capabilities dropped
+- all capabilities dropped, then only `SYS_ADMIN` added
 - `no-new-privileges`
 - private cgroup namespace
-- PID limit of 128
-- memory limit of 2 GiB
-- CPU limit of 2 CPUs
-- file-descriptor limit of 256
-- process limit of 128
+- PID limit 128
+- memory limit 2 GiB
+- CPU limit 2 CPUs
+- file-descriptor limit 256
+- process limit 128
 - disabled core dumps
-- 512 MiB executable tmpfs for `/home/opencode-demo`
-- 64 MiB `noexec` tmpfs for `/tmp`
+- bounded tmpfs storage for `/home/opencode-demo` and `/tmp`
 - Docker bridge networking
-- host-loopback-only publication of port 7681
+- port 7681 published only to host loopback
 - no bind mounts
 - no Docker socket
 - no controller checkout
@@ -91,34 +78,33 @@ The updater has a separate persistent Bun download-cache volume. Its HOME is dis
 - read-only OpenCode runtime volume
 - bounded local Docker logs
 
-Docker's default seccomp and AppArmor profiles are disabled for this child because Bubblewrap must create namespaces and mount the filesystem view for the OpenCode process. The child still has no capabilities and retains `no-new-privileges`; OpenCode runs inside the nested Bubblewrap boundary described below.
+Docker's default seccomp and AppArmor profiles are disabled because the trusted supervisor must create the Bubblewrap mount and process namespaces. Visitor-controlled processes never run with the supervisor's `SYS_ADMIN` capability.
 
-The image strips SUID/SGID bits and removes world-writable permissions from its immutable filesystem content.
+The image strips SUID/SGID bits and removes world-writable permissions from immutable image content.
 
-## Environment and credential isolation
+## Session lifecycle
 
-The Docker socket and GitHub authentication exist only in the controller. They are never copied or mounted into the public child.
+`run-demo-container.sh` starts from a sanitized environment. For each browser cohort it recreates `/home/opencode-demo/session`, copies the baked source snapshot into a fresh workspace owned by uid 1001, links the immutable Node dependencies, and invokes `opencode-ephemeral`.
 
-`run-demo-container.sh` starts from an `env -i` allowlist and launches ttyd through another minimal environment. `run-demo-session.sh` creates a new session home and workspace, copies the baked source snapshot into that workspace, links the immutable Node dependencies, and then invokes `opencode-ephemeral`.
+The public process tree is:
 
-The source checkout used by the controller is never mounted into the child.
+```text
+run-demo-container        trusted root supervisor
+  └─ opencode-ephemeral   trusted Bubblewrap setup
+       └─ bwrap
+            └─ setpriv uid=1001 gid=1001 caps=none
+                 └─ ttyd :7681
+                      └─ tmux session "opencode-demo"
+                           └─ opencode2 --standalone /workspace
+```
 
-## Ephemeral OpenCode sandbox
+When ttyd exits, the Bubblewrap sandbox ends, the supervisor deletes the cohort workspace, and a fresh cohort is created.
 
-`opencode-ephemeral.sh` is the OpenCode launcher. It receives the disposable session workspace and creates a Bubblewrap sandbox with a tmpfs root.
+## Ephemeral OpenCode state
 
-The sandbox exposes only the runtime surfaces OpenCode needs:
+`opencode-ephemeral.sh` receives the disposable host-side workspace and exposes it inside the sandbox as `/workspace`. The checked-in `/workspace/.opencode/opencode.jsonc` remains the project configuration and its local `"./"` plugin entry resolves to the copied `.opencode` entrypoint and bundled REPL plugin source.
 
-- `/usr` and `/opt` read-only
-- selected host/container system files read-only
-- `/sys` read-only
-- a fresh `/proc`
-- a fresh `/dev`
-- a writable tmpfs `/tmp`
-- the current session workspace as the only writable project tree
-- the prebuilt Python REPL cache read-only at the XDG cache path expected by the plugin
-
-The launcher clears the environment and supplies an explicit runtime allowlist. OpenCode receives fresh per-process paths for:
+The launcher creates a fresh private home and fresh OpenCode state for every Bubblewrap invocation:
 
 ```text
 XDG_CONFIG_HOME=/tmp/opencode-xdg/config
@@ -130,83 +116,47 @@ OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db
 NPM_CONFIG_CACHE=/tmp/opencode-xdg/npm
 ```
 
-The plugin executable overrides are also explicit:
-
-```text
-OPENCODE_REPL_NODE=/usr/local/bin/node
-OPENCODE_REPL_PYTHON=/usr/bin/python3
-```
-
-OpenCode starts from the disposable workspace with `--standalone`. Project configuration remains available through `$WORKSPACE/.opencode/opencode.jsonc`; its local plugin entry resolves to the copied `.opencode` plugin entrypoint and the bundled REPL plugin source.
-
-No OpenCode database, cache, state, generated configuration, or session home survives the browser cohort.
-
-## TUI and session lifecycle
-
-The public terminal process tree is:
-
-```text
-run-demo-container
-  └─ ttyd :7681
-       └─ tmux session "opencode-demo"
-            └─ run-demo-session
-                 └─ opencode-ephemeral
-                      └─ bwrap
-                           └─ opencode2 --standalone <workspace>
-```
-
-`ttyd` is writable, checks request origin, allows at most four clients, and exits when the connection cohort is gone. tmux keeps the terminal stable while members of that cohort reconnect.
-
-`run-demo-session.sh` takes an exclusive session lock, recreates `/home/opencode-demo/session`, populates a private writable workspace, and starts the Bubblewrap launcher. When ttyd exits, `run-demo-container.sh` kills the tmux server, removes the session tree, and starts a fresh ttyd cohort.
-
-The enclosing `/home/opencode-demo` tmpfs lasts only for the lifetime of the public Docker child. The child itself is recreated whenever the Codespace start hook runs.
+The prebuilt Python REPL cache is mounted read-only at the cache path expected by the plugin. Node and Python executable overrides are explicit. No OpenCode database, cache, state, generated configuration, or home directory survives the cohort.
 
 ## Network model
 
-The trusted controller uses host networking. The public child uses Docker bridge networking and publishes its HTTP listener only as `127.0.0.1:7681` on the Codespace host.
+The controller uses host networking. The Docker child uses bridge networking and publishes `127.0.0.1:7681` on the Codespace host. Bubblewrap shares only the Docker child's network namespace, so OpenCode can make outbound requests without receiving the controller's host network namespace.
 
-Bubblewrap shares the child's network namespace so OpenCode can use outbound connections subject to the surrounding platform's network policy. Bubblewrap does not receive the controller's host network namespace.
-
-Codespaces forwards the loopback listener and provides the public HTTPS endpoint. `publish-demo.sh` makes the forwarded port public only after readiness succeeds and verifies the resulting visibility through `gh`.
+Codespaces forwards the loopback listener and provides the public HTTPS endpoint. `publish-demo.sh` makes the forwarded port public only after readiness succeeds and verifies its visibility through `gh`.
 
 ## CI contract
 
-`.github/workflows/build-demo-image.yml` validates the deployment architecture before publishing images.
-
-The sandbox smoke test checks:
+`.github/workflows/build-demo-image.yml` validates the deployment boundary before publishing images. The sandbox smoke test requires:
 
 - OpenCode V2 seed availability
-- Bubblewrap and the ephemeral launcher are installed
-- a real `run-demo-session` remains alive
-- a Bubblewrap process is present
-- the OpenCode process receives the expected ephemeral XDG/database paths
-- child UID and read-only rootfs
-- resource limits and bridge networking
-- private cgroup namespace
-- dropped capabilities and `no-new-privileges`
-- the seccomp/AppArmor settings required for nested Bubblewrap
-- absence of bind mounts, Docker socket, controller checkout, and GitHub credentials
-- read-only runtime, dependency, source, and Python-cache content
-- absence of SUID/SGID and world-writable image content
+- exactly Bubblewrap 0.12.0
+- successful execution of a command as uid 1001 through `opencode-ephemeral`
+- a real OpenCode TUI process inside Bubblewrap
+- expected ephemeral XDG/database environment paths
+- uid 1001 and zero inheritable, permitted, effective, bounding, and ambient capabilities for public processes
+- root supervisor with only `SYS_ADMIN`
+- read-only rootfs and runtime volume
+- resource limits, bridge networking, and private cgroup namespace
+- required Docker seccomp/AppArmor settings
+- absence of host binds, Docker socket, controller checkout, and GitHub credentials
+- read-only source, dependencies, and Python cache
+- absence of SUID/SGID and world-writable immutable image content
 
-Only after that smoke test passes is the demo image published. The controller image is built on top of the validated demo image and is then exercised through the Dev Container CLI, including the startup updater, loopback listener, child runtime volume, network model, security options, and current OpenCode executable.
+Only after the sandbox passes is the demo image published. The controller image is then built from that validated image and exercised through the Dev Container CLI, including the startup updater and end-to-end listener.
 
 ## Security boundary and residual risk
 
-The controller/public-child split protects the repository checkout, GitHub credentials, Docker authority, and controller filesystem from public visitor code. Bubblewrap additionally gives the OpenCode process a fresh filesystem and process namespace view with disposable application state.
+The controller/public-child split protects the repository checkout, GitHub credentials, Docker authority, and controller filesystem. Bubblewrap separates all visitor-controlled processes from the Docker supervisor's namespace capability and gives OpenCode a disposable filesystem/process view.
 
-The child and controller still share the Codespace host kernel. A successful kernel or container-runtime escape can cross the intended boundary. The controller's Docker socket is host-level authority and must remain exclusive to the trusted controller.
-
-Outbound networking is intentionally available to OpenCode. Visitors in the same ttyd cohort share one tmux/OpenCode session and can observe and control the same terminal state. This demo is therefore a shared public session, not a private per-visitor environment.
+The child and controller still share the Codespace host kernel. A kernel or container-runtime escape can cross the intended boundary. Outbound networking is intentionally available. Visitors in the same ttyd cohort share one tmux/OpenCode session and can observe and control the same terminal state.
 
 ## File map
 
-- `devcontainer.json` selects the controller image, exposes the Docker socket to the controller, declares port 7681, and wires lifecycle hooks.
-- `controller.Dockerfile` builds the trusted management image on top of the sandbox image.
-- `Dockerfile` builds the public runtime, OpenCode bootstrap, Bubblewrap, plugin dependencies, Python cache, and source snapshot.
-- `start-demo-sandbox.sh` updates and verifies OpenCode, recreates the child, and waits for readiness.
-- `run-demo-sandbox.sh` defines the Docker security, resource, filesystem, network, and logging boundary.
-- `run-demo-container.sh` sanitizes the child environment and supervises ttyd/tmux cohorts.
-- `run-demo-session.sh` creates the disposable session home/workspace and invokes the ephemeral launcher.
-- `opencode-ephemeral.sh` creates the Bubblewrap filesystem/namespace view and starts OpenCode with disposable XDG state.
+- `devcontainer.json` selects the controller image, declares port 7681, and wires lifecycle hooks.
+- `controller.Dockerfile` builds the trusted controller on top of the validated demo image.
+- `Dockerfile` builds the public runtime, pinned Bubblewrap, OpenCode bootstrap, plugin dependencies, Python cache, and source snapshot.
+- `start-demo-sandbox.sh` updates and verifies OpenCode, recreates the Docker child, and waits for readiness.
+- `run-demo-sandbox.sh` defines the outer Docker security, resource, filesystem, network, and logging boundary.
+- `run-demo-container.sh` owns disposable cohort workspaces and invokes the nested sandbox.
+- `opencode-ephemeral.sh` creates the Bubblewrap namespace/filesystem boundary, drops public privileges, and supplies ephemeral OpenCode state.
 - `publish-demo.sh` publishes and verifies the ready Codespaces port.
