@@ -52,14 +52,6 @@ function isSupportedVersion(version: PythonVersion | undefined): version is Pyth
   return version.major > 3 || (version.major === 3 && version.minor >= 10)
 }
 
-function errorCode(error: unknown): unknown {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return undefined
-  }
-
-  return error.code
-}
-
 function cacheRoot(): string {
   const home = process.env.HOME ?? os.homedir()
   return process.env.XDG_CACHE_HOME ?? path.join(home, '.cache')
@@ -91,58 +83,10 @@ async function verifyEnvironment(python: string, signal: AbortSignal): Promise<v
   await captureCommand(python, VERIFY_COMMAND, signal)
 }
 
-function isPublishRace(code: unknown): boolean {
-  return code === 'EEXIST' || code === 'ENOTEMPTY'
-}
-
-async function copyPublished(temporaryVenv: string, finalVenv: string): Promise<void> {
-  const parent = path.dirname(finalVenv)
-  const staging = path.join(parent, `.publish-${process.pid}-${crypto.randomUUID()}`)
-  try {
-    await fs.cp(temporaryVenv, staging, { recursive: true, errorOnExist: true })
-    try {
-      await fs.rename(staging, finalVenv)
-    } catch (error) {
-      if (!isPublishRace(errorCode(error))) {
-        throw error
-      }
-    }
-  } finally {
-    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined)
-  }
-}
-
-async function publishFallback(
-  error: unknown,
-  temporaryVenv: string,
-  finalVenv: string
-): Promise<void> {
-  const code = errorCode(error)
-  if (isPublishRace(code)) {
-    return
-  }
-
-  if (code === 'EXDEV') {
-    await copyPublished(temporaryVenv, finalVenv)
-    return
-  }
-
-  throw error
-}
-
-async function publish(temporaryVenv: string, finalVenv: string): Promise<void> {
-  try {
-    await fs.rename(temporaryVenv, finalVenv)
-  } catch (error) {
-    await publishFallback(error, temporaryVenv, finalVenv)
-  }
-}
-
 export class PythonEnvironment {
   private readonly bootstrapAbort = new AbortController()
   private bootstrapPromise: Promise<string> | undefined
   private readyPython: string | undefined
-  private readonly temporaryRoots = new Set<string>()
 
   constructor(private readonly configuredPython: string) {}
 
@@ -200,13 +144,12 @@ export class PythonEnvironment {
   }
 
   private async create(paths: EnvironmentPaths, signal: AbortSignal): Promise<string> {
-    const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'opencode-repl-python-'))
-    const temporaryVenv = path.join(temporaryRoot, 'venv')
-    this.temporaryRoots.add(temporaryRoot)
+    let isReady = false
     try {
-      await this.populate(temporaryVenv, signal)
-      await publish(temporaryVenv, paths.venv)
+      await fs.rm(paths.venv, { recursive: true, force: true })
+      await this.populate(paths.venv, signal)
       await verifyEnvironment(paths.python, signal)
+      isReady = true
       return paths.python
     } catch (error) {
       if (error instanceof PythonStartupError) {
@@ -215,7 +158,9 @@ export class PythonEnvironment {
 
       throw new PythonStartupError(errorMessage(error))
     } finally {
-      await this.removeTemporary(temporaryRoot)
+      if (!isReady) {
+        await fs.rm(paths.venv, { recursive: true, force: true }).catch(() => undefined)
+      }
     }
   }
 
@@ -238,11 +183,6 @@ export class PythonEnvironment {
     )
   }
 
-  private async removeTemporary(temporaryRoot: string): Promise<void> {
-    this.temporaryRoots.delete(temporaryRoot)
-    await fs.rm(temporaryRoot, { recursive: true, force: true }).catch(() => undefined)
-  }
-
   async ensure(): Promise<string> {
     if (this.readyPython !== undefined) {
       return this.readyPython
@@ -261,9 +201,5 @@ export class PythonEnvironment {
   async close(): Promise<void> {
     this.bootstrapAbort.abort()
     await this.bootstrapPromise?.catch(() => undefined)
-    await Promise.allSettled(
-      [...this.temporaryRoots].map(async (item) => fs.rm(item, { recursive: true, force: true }))
-    )
-    this.temporaryRoots.clear()
   }
 }
