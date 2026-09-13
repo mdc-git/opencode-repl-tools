@@ -1,10 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ $(id -u) -ne 0 ]]; then
+  echo 'opencode-ephemeral must run from the trusted container supervisor' >&2
+  exit 1
+fi
+
 workspace="$(readlink -f "${1:?workspace is required}")"
 shift
 opencode_bin="$(readlink -f "$(command -v opencode2)")"
 python_cache=/opt/opencode-repl-cache/opencode/repl-tools/python
+sandbox_workspace=/workspace
+state_root="$(mktemp -d /tmp/opencode-ephemeral.XXXXXX)"
+
+cleanup() {
+  rm -rf "$state_root"
+}
+trap cleanup EXIT
+
+install -d -o 1001 -g 1001 -m 0700 \
+  "$state_root/home" \
+  "$state_root/tmux" \
+  "$state_root/xdg" \
+  "$state_root/xdg/bin" \
+  "$state_root/xdg/config/opencode" \
+  "$state_root/xdg/data/opencode" \
+  "$state_root/xdg/cache/opencode/repl-tools" \
+  "$state_root/xdg/state" \
+  "$state_root/xdg/npm"
 
 system_mounts=()
 for path in /etc/alternatives /etc/ld.so.cache /etc/ld.so.conf /etc/ld.so.conf.d \
@@ -16,10 +39,16 @@ for path in /etc/alternatives /etc/ld.so.cache /etc/ld.so.conf /etc/ld.so.conf.d
   fi
 done
 
+if (( $# == 0 )); then
+  set -- opencode2 --standalone "$sandbox_workspace"
+fi
+
 bwrap \
   --die-with-parent \
-  --unshare-all \
-  --share-net \
+  --unshare-ipc \
+  --unshare-pid \
+  --unshare-uts \
+  --unshare-cgroup-try \
   --tmpfs / \
   --ro-bind /usr /usr \
   --ro-bind /opt /opt \
@@ -29,33 +58,29 @@ bwrap \
   --symlink usr/lib64 /lib64 \
   "${system_mounts[@]}" \
   --ro-bind /sys /sys \
-  --perms 0700 \
-  --dir "$HOME" \
-  --dir /run/user \
+  --perms 1777 \
   --tmpfs /tmp \
-  --perms 0700 \
-  --dir /tmp/opencode-xdg \
-  --dir /tmp/opencode-xdg/bin \
+  --bind "$state_root/home" /home/opencode-demo \
+  --bind "$state_root/tmux" /tmp/tmux \
+  --bind "$state_root/xdg" /tmp/opencode-xdg \
   --ro-bind "$opencode_bin" /tmp/opencode-xdg/bin/opencode2 \
   --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
-  --dir /tmp/opencode-xdg/config/opencode \
-  --dir /tmp/opencode-xdg/data/opencode \
-  --dir /tmp/opencode-xdg/cache/opencode/repl-tools \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
-  --dir /tmp/opencode-xdg/state \
-  --dir /tmp/opencode-xdg/npm \
-  --dir "$workspace" \
-  --bind "$workspace" "$workspace" \
-  --dev /dev \
+  --bind "$workspace" "$sandbox_workspace" \
+  --dev-bind /dev /dev \
   --proc /proc \
+  --cap-add CAP_SETGID \
+  --cap-add CAP_SETPCAP \
+  --cap-add CAP_SETUID \
   --clearenv \
-  --setenv HOME "$HOME" \
-  --setenv USER "${USER:-opencode-demo}" \
-  --setenv LOGNAME "${LOGNAME:-opencode-demo}" \
+  --setenv HOME /home/opencode-demo \
+  --setenv USER opencode-demo \
+  --setenv LOGNAME opencode-demo \
   --setenv SHELL /bin/bash \
   --setenv TERM "${TERM:-xterm-256color}" \
   --setenv LANG C.UTF-8 \
   --setenv TMPDIR /tmp \
+  --setenv TMUX_TMPDIR /tmp/tmux \
   --setenv XDG_CONFIG_HOME /tmp/opencode-xdg/config \
   --setenv OPENCODE_CONFIG_DIR /tmp/opencode-xdg/config/opencode \
   --setenv XDG_DATA_HOME /tmp/opencode-xdg/data \
@@ -66,5 +91,13 @@ bwrap \
   --setenv OPENCODE_REPL_NODE /usr/local/bin/node \
   --setenv OPENCODE_REPL_PYTHON /usr/bin/python3 \
   --setenv PATH /tmp/opencode-xdg/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-  --chdir "$workspace" \
-  -- opencode2 --standalone "$workspace" "$@"
+  --chdir "$sandbox_workspace" \
+  -- /usr/bin/setpriv \
+    --reuid=1001 \
+    --regid=1001 \
+    --clear-groups \
+    --bounding-set=-all \
+    --inh-caps=-all \
+    --ambient-caps=-all \
+    --no-new-privs \
+    -- "$@"

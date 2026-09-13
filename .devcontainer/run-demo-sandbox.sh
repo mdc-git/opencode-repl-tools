@@ -13,9 +13,14 @@ fi
 
 docker run --detach \
   --name "$NAME" \
-  --user 1001:1001 \
+  --user 0:0 \
   --read-only \
   --cap-drop ALL \
+  --cap-add CHOWN \
+  --cap-add SETGID \
+  --cap-add SETPCAP \
+  --cap-add SETUID \
+  --cap-add SYS_ADMIN \
   --security-opt no-new-privileges:true \
   --security-opt seccomp=unconfined \
   --security-opt apparmor=unconfined \
@@ -26,8 +31,8 @@ docker run --detach \
   --ulimit core=0:0 \
   --ulimit nofile=256:256 \
   --ulimit nproc=128:128 \
-  --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=1001,gid=1001,mode=0700 \
-  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=1001,gid=1001,mode=0700 \
+  --tmpfs /home/opencode-demo:rw,exec,nosuid,nodev,size=512m,uid=0,gid=0,mode=0700 \
+  --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m,uid=0,gid=0,mode=0700 \
   --mount "type=volume,source=$RUNTIME_VOLUME,target=/opt/opencode-runtime,readonly" \
   --network bridge \
   --publish "${PUBLISH}:7681" \

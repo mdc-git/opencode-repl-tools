@@ -10,7 +10,6 @@ on:
       - .devcontainer/devcontainer.json
       - .devcontainer/opencode-ephemeral.sh
       - .devcontainer/run-demo-container.sh
-      - .devcontainer/run-demo-session.sh
       - .devcontainer/run-demo-sandbox.sh
       - .devcontainer/start-demo-sandbox.sh
       - .devcontainer/publish-demo.sh
@@ -91,32 +90,47 @@ jobs:
           esac
           printf 'baked OpenCode seed: %s\n' "$seed_version"
 
-          docker exec "$name" test -x /usr/bin/bwrap
+          test "$(docker exec "$name" /usr/bin/bwrap --version)" = "bubblewrap 0.12.0"
           docker exec "$name" test -x /usr/local/bin/opencode-ephemeral
+
           docker exec "$name" bash -ceu '
-            export HOME=/home/opencode-demo
-            export TMUX_TMPDIR=$HOME/tmux
-            export PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin
+            workspace=/tmp/opencode-uid-smoke
+            rm -rf "$workspace"
+            install -d -o 1001 -g 1001 -m 0700 "$workspace"
+            test "$(/usr/local/bin/opencode-ephemeral "$workspace" /usr/bin/id -u)" = 1001
+            rm -rf "$workspace"
+          '
 
-            tmux new-session -d -s opencode-smoke /bin/sh
-            tmux set-option -w -t opencode-smoke remain-on-exit on
-            tmux respawn-pane -k -t opencode-smoke /usr/local/bin/run-demo-session
-            sleep 5
+          docker exec -d "$name" bash -ceu '
+            workspace=/tmp/opencode-process-smoke
+            rm -rf "$workspace"
+            install -d -o 1001 -g 1001 -m 0700 "$workspace"
+            cp -a /opt/opencode-demo/source/. "$workspace/"
+            chown -R 1001:1001 "$workspace"
+            ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
+            exec /usr/local/bin/opencode-ephemeral "$workspace" \
+              /bin/bash -ceu "tmux new-session -d -s opencode-smoke opencode2 --standalone /workspace; exec sleep 20"
+          '
+          sleep 5
 
-            if [ "$(tmux display-message -p -t opencode-smoke "#{pane_dead}")" = 1 ]; then
-              echo "OpenCode demo session exited during startup" >&2
-              tmux capture-pane -p -S -200 -t opencode-smoke >&2 || true
-              exit 1
-            fi
-
-            found_bwrap=
+          docker exec "$name" bash -ceu '
+            found_ttyd=
             found_opencode=
             for proc in /proc/[0-9]*; do
               comm="$(cat "$proc/comm" 2>/dev/null || true)"
-              if [ "$comm" = bwrap ]; then
-                found_bwrap=1
+              case "$comm" in
+                ttyd|opencode2)
+                  grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" "$proc/status"
+                  grep -Eq "^NoNewPrivs:[[:space:]]+1$" "$proc/status"
+                  for field in CapInh CapPrm CapEff CapBnd CapAmb; do
+                    grep -Eq "^${field}:[[:space:]]+0+$" "$proc/status"
+                  done
+                  ;;
+              esac
+              if [[ "$comm" = ttyd ]]; then
+                found_ttyd=1
               fi
-              if [ "$comm" = opencode2 ]; then
+              if [[ "$comm" = opencode2 ]]; then
                 env="$(tr "\000" "\n" <"$proc/environ" 2>/dev/null || true)"
                 grep -Fxq "XDG_CONFIG_HOME=/tmp/opencode-xdg/config" <<<"$env"
                 grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$env"
@@ -125,14 +139,11 @@ jobs:
                 found_opencode=1
               fi
             done
-            test "$found_bwrap" = 1
+            test "$found_ttyd" = 1
             test "$found_opencode" = 1
-
-            tmux kill-session -t opencode-smoke
-            rm -rf "$HOME/session" "$HOME/.session.lock"
           '
 
-          test "$(docker inspect --format '{{.Config.User}}' "$name")" = "1001:1001"
+          test "$(docker inspect --format '{{.Config.User}}' "$name")" = "0:0"
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$name")" = true
           test "$(docker inspect --format '{{.HostConfig.Privileged}}' "$name")" = false
           test "$(docker inspect --format '{{.HostConfig.PidsLimit}}' "$name")" = 128
@@ -143,6 +154,10 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$name")" = false
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$name")" = "$runtime_volume"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
+          cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$name")"
+          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+            grep -Fq "\"$capability\"" <<<"$cap_add"
+          done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
           grep -Fq 'seccomp=unconfined' <<<"$security_opts"
@@ -169,16 +184,11 @@ jobs:
           docker exec "$name" sh -ceu '
             test -z "$(find / -xdev -type f \( -perm -4000 -o -perm -2000 \) -print -quit)"
             test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
-
-            grep -Eq "^Uid:[[:space:]]+1001([[:space:]]+1001){3}$" /proc/1/status
+            grep -Eq "^Uid:[[:space:]]+0([[:space:]]+0){3}$" /proc/1/status
             grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/1/status
-            for field in CapInh CapPrm CapEff CapBnd CapAmb; do
-              grep -Eq "^${field}:[[:space:]]+0+$" /proc/1/status
-            done
-
             if tr "\000" "\n" </proc/1/environ \
                 | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
-              echo "GitHub credential leaked into public sandbox process" >&2
+              echo "GitHub credential leaked into trusted sandbox supervisor" >&2
               exit 1
             fi
           '
@@ -221,7 +231,7 @@ jobs:
             gh --version
             git --version
             curl --version >/dev/null
-            bwrap --version
+            test "$(bwrap --version)" = "bubblewrap 0.12.0"
             test -x /usr/local/bin/opencode-ephemeral
             test -x /usr/local/bin/run-demo-sandbox
             test -x /usr/local/bin/start-demo-sandbox
@@ -291,6 +301,7 @@ jobs:
           docker exec "$controller_id" curl --fail --silent --show-error \
             http://127.0.0.1:7681/ >/dev/null
           docker inspect --format '{{.State.Running}}' "$sandbox_name" | grep -qx true
+          test "$(docker inspect --format '{{.Config.User}}' "$sandbox_name")" = "0:0"
           test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$sandbox_name")" = bridge
           docker inspect --format '{{json .HostConfig.PortBindings}}' "$sandbox_name" \
             | grep -Eq '"HostIp":"127\.0\.0\.1","HostPort":"7681"'
@@ -299,12 +310,18 @@ jobs:
           test "$(docker inspect --format '{{.Image}}' "$sandbox_name")" = \
             "$(docker image inspect --format '{{.Id}}' "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo")"
           test -z "$(docker inspect --format '{{range .Mounts}}{{if eq .Name "opencode-repl-tools-demo-update-cache"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")"
+          docker inspect --format '{{json .HostConfig.CapDrop}}' "$sandbox_name" | grep -Eq '"ALL"'
+          cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$sandbox_name")"
+          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+            grep -Fq "\"$capability\"" <<<"$cap_add"
+          done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$sandbox_name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
           grep -Fq 'seccomp=unconfined' <<<"$security_opts"
           grep -Fq 'apparmor=unconfined' <<<"$security_opts"
           docker volume inspect "$update_cache_volume" >/dev/null
           test -z "$(docker ps --filter "name=^/${updater_name}$" --format '{{.ID}}')"
+          test "$(docker exec "$sandbox_name" bwrap --version)" = "bubblewrap 0.12.0"
 
           child_version="$(docker exec "$sandbox_name" /opt/opencode-runtime/bin/opencode2 --version)"
           case "$child_version" in

@@ -4,17 +4,20 @@ set -euo pipefail
 if [[ "${OPENCODE_DEMO_ENV_SANITIZED:-}" != 1 ]]; then
   exec env -i \
     HOME=/home/opencode-demo \
-    USER=opencode-demo \
-    LOGNAME=opencode-demo \
+    USER=root \
+    LOGNAME=root \
     SHELL=/bin/bash \
     LANG=C.UTF-8 \
-    PATH=/usr/local/bin:/usr/bin:/bin \
+    PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin \
     OPENCODE_DEMO_ENV_SANITIZED=1 \
     "$0"
 fi
 
 DEMO_HOME=/home/opencode-demo
-TMUX_TMPDIR=$DEMO_HOME/tmux
+SESSION_ROOT=$DEMO_HOME/session
+SESSION_HOME=$SESSION_ROOT/home
+WORKSPACE=$SESSION_HOME/workspace
+DEMO_SOURCE=/opt/opencode-demo/source
 PORT=7681
 
 umask 077
@@ -22,17 +25,15 @@ ulimit -c 0
 ulimit -n 256
 ulimit -u 128
 
-install -d -m 0700 "$TMUX_TMPDIR"
-
 while true; do
-  env -i \
-    HOME="$DEMO_HOME" \
-    TMUX_TMPDIR="$TMUX_TMPDIR" \
-    USER=opencode-demo \
-    LOGNAME=opencode-demo \
-    SHELL=/bin/bash \
-    LANG=C.UTF-8 \
-    PATH=/usr/local/bin:/usr/bin:/bin \
+  rm -rf "$SESSION_ROOT"
+  install -d -o 1001 -g 1001 -m 0700 "$SESSION_HOME" "$WORKSPACE"
+  cp -a "$DEMO_SOURCE/." "$WORKSPACE/"
+  chown -R 1001:1001 "$WORKSPACE"
+  chmod -R u+rwX,go-rwx "$WORKSPACE"
+  ln -s /opt/opencode-repl-tools/node_modules "$WORKSPACE/node_modules"
+
+  /usr/local/bin/opencode-ephemeral "$WORKSPACE" \
     /usr/local/bin/ttyd \
       --writable \
       --check-origin \
@@ -40,17 +41,10 @@ while true; do
       --exit-no-conn \
       --interface 0.0.0.0 \
       --port "$PORT" \
-      /usr/bin/tmux new-session -A -s opencode-demo /usr/local/bin/run-demo-session || true
+      /usr/bin/tmux new-session -A -s opencode-demo \
+        opencode2 --standalone /workspace || true
 
-  env -i \
-    HOME="$DEMO_HOME" \
-    TMUX_TMPDIR="$TMUX_TMPDIR" \
-    USER=opencode-demo \
-    LOGNAME=opencode-demo \
-    PATH=/usr/local/bin:/usr/bin:/bin \
-    /usr/bin/tmux kill-server >/dev/null 2>&1 || true
-  rm -rf "$DEMO_HOME/session"
-
+  rm -rf "$SESSION_ROOT"
   echo "ttyd exited; restarting with a fresh demo session" >&2
   sleep 1
 done
