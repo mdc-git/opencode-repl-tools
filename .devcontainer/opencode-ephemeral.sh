@@ -47,6 +47,7 @@ if (( $# == 0 )); then
   set -- opencode2 --standalone "$sandbox_workspace"
 fi
 
+set +e
 bwrap \
   --die-with-parent \
   --unshare-ipc \
@@ -106,3 +107,21 @@ bwrap \
     --ambient-caps=-all \
     --no-new-privs \
     -- "$@"
+status=$?
+set -e
+
+if (( status != 0 )); then
+  echo "sandbox command exited with status $status" >&2
+  for log_root in \
+    "$state_root/home/.local/share/opencode/log" \
+    "$state_root/xdg/data/opencode/log"; do
+    if [[ -d "$log_root" ]]; then
+      while IFS= read -r -d '' log_file; do
+        printf '%s\n' "--- $log_file ---" >&2
+        cat "$log_file" >&2 || true
+      done < <(find "$log_root" -type f -print0)
+    fi
+  done
+fi
+
+exit "$status"
