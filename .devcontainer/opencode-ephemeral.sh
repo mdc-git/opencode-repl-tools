@@ -61,7 +61,7 @@ bwrap \
   --tmpfs /tmp \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
-  --ro-bind "$opencode_bin" /tmp/opencode-xdg/bin/opencode2 \
+  --symlink "$opencode_bin" /tmp/opencode-xdg/bin/opencode2 \
   --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
   --bind "$workspace" "$sandbox_workspace" \
