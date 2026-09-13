@@ -58,6 +58,7 @@ bwrap \
   --symlink usr/lib64 /lib64 \
   "${system_mounts[@]}" \
   --ro-bind /sys /sys \
+  --perms 1777 \
   --tmpfs /tmp \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/tmux" /tmp/tmux \
