@@ -129,7 +129,7 @@ Node code can emit images directly:
 ```js
 await opencode.emitImage({
   bytes: imageBuffer,
-  mimeType: "image/png"
+  mimeType: 'image/png'
 })
 ```
 
