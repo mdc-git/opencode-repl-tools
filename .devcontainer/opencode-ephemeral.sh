@@ -20,12 +20,16 @@ trap cleanup EXIT
 
 install -d -o 1001 -g 1001 -m 0700 \
   "$state_root/home" \
+  "$state_root/home/.config/opencode" \
+  "$state_root/home/.local/share/opencode/log" \
+  "$state_root/home/.local/state/opencode" \
+  "$state_root/home/.cache/opencode" \
   "$state_root/xdg" \
   "$state_root/xdg/bin" \
   "$state_root/xdg/config/opencode" \
   "$state_root/xdg/data/opencode" \
   "$state_root/xdg/cache/opencode/repl-tools" \
-  "$state_root/xdg/state" \
+  "$state_root/xdg/state/opencode" \
   "$state_root/xdg/npm"
 
 system_mounts=()
@@ -40,33 +44,6 @@ done
 
 if (( $# == 0 )); then
   set -- opencode2 --standalone "$sandbox_workspace"
-fi
-
-if [[ ${1:-} == opencode2 && ${2:-} == --version && $# -eq 2 ]]; then
-  set +e
-  direct_version="$(/usr/bin/setpriv \
-    --reuid=1001 \
-    --regid=1001 \
-    --clear-groups \
-    --bounding-set=-all \
-    --inh-caps=-all \
-    --ambient-caps=-all \
-    --no-new-privs \
-    -- /opt/opencode-runtime/bin/opencode2 --version 2>&1)"
-  direct_status=$?
-  set -e
-  printf 'pre-bwrap OpenCode status=%s output=%q\n' "$direct_status" "$direct_version" >&2
-  set -- /bin/sh -ceu '
-    set +e
-    printf "bwrap opencode path=%s target=%s uid=%s\n" \
-      "$(command -v opencode2 || true)" \
-      "$(readlink -f /opt/opencode-runtime/bin/opencode2 || true)" \
-      "$(id -u)" >&2
-    /opt/opencode-runtime/bin/opencode2 --version
-    status=$?
-    printf "bwrap OpenCode status=%s\n" "$status" >&2
-    exit "$status"
-  '
 fi
 
 bwrap \
