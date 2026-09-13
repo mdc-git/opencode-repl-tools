@@ -8,7 +8,7 @@ fi
 
 workspace="$(readlink -f "${1:?workspace is required}")"
 shift
-opencode_bin="$(readlink -f /opt/opencode-runtime/bin/opencode2)"
+test -x /opt/opencode-runtime/bin/opencode2
 python_cache=/opt/opencode-repl-cache/opencode/repl-tools/python
 sandbox_workspace=/workspace
 state_root="$(mktemp -d /tmp/opencode-ephemeral.XXXXXX)"
@@ -61,8 +61,7 @@ bwrap \
   --tmpfs /tmp \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
-  --symlink "$opencode_bin" /tmp/opencode-xdg/bin/opencode2 \
-  --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
+  --symlink /opt/opencode-runtime/bin/opencode2 /tmp/opencode-xdg/bin/opencode \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
   --bind "$workspace" "$sandbox_workspace" \
   --dev-bind /dev /dev \
@@ -87,7 +86,7 @@ bwrap \
   --setenv NPM_CONFIG_CACHE /tmp/opencode-xdg/npm \
   --setenv OPENCODE_REPL_NODE /usr/local/bin/node \
   --setenv OPENCODE_REPL_PYTHON /usr/bin/python3 \
-  --setenv PATH /tmp/opencode-xdg/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  --setenv PATH /opt/opencode-runtime/bin:/tmp/opencode-xdg/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   --chdir "$sandbox_workspace" \
   -- /usr/bin/setpriv \
     --reuid=1001 \
