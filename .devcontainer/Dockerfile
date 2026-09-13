@@ -120,7 +120,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       libcap2 \
       libstdc++6 \
       python3 \
-      tmux \
       util-linux; \
     groupadd --gid 1001 opencode-demo; \
     useradd --uid 1001 --gid 1001 --create-home --shell /bin/bash opencode-demo; \
