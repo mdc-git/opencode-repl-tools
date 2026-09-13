@@ -101,9 +101,14 @@ jobs:
             workspace=/tmp/opencode-uid-smoke
             rm -rf "$workspace"
             install -d -o 1001 -g 1001 -m 0700 "$workspace"
-            sandbox_uid="$(/usr/local/bin/opencode-ephemeral "$workspace" /usr/bin/id -u)"
-            printf "ephemeral sandbox uid: %s\n" "$sandbox_uid"
-            test "$sandbox_uid" = 1001
+            sandbox_probe="$(/usr/local/bin/opencode-ephemeral "$workspace" \
+              /bin/sh -ceu "printf \"uid=%s\\n\" \"\$(id -u)\"; env")"
+            printf "%s\n" "$sandbox_probe"
+            grep -Fxq "uid=1001" <<<"$sandbox_probe"
+            grep -Fxq "XDG_CONFIG_HOME=/tmp/opencode-xdg/config" <<<"$sandbox_probe"
+            grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$sandbox_probe"
+            grep -Fxq "XDG_CACHE_HOME=/tmp/opencode-xdg/cache" <<<"$sandbox_probe"
+            grep -Fxq "OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db" <<<"$sandbox_probe"
             rm -rf "$workspace"
           '
 
@@ -138,11 +143,6 @@ jobs:
                 found_ttyd=1
               fi
               if [[ "$comm" = opencode2 ]]; then
-                env="$(tr "\000" "\n" <"$proc/environ" 2>/dev/null || true)"
-                grep -Fxq "XDG_CONFIG_HOME=/tmp/opencode-xdg/config" <<<"$env"
-                grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$env"
-                grep -Fxq "XDG_CACHE_HOME=/tmp/opencode-xdg/cache" <<<"$env"
-                grep -Fxq "OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db" <<<"$env"
                 found_opencode=1
               fi
             done
