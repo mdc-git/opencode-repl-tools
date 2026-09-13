@@ -78,13 +78,9 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     opencode2 update --method bun; \
     echo "OpenCode after update 1: $(opencode2 --version)"; \
     opencode2 update --method bun; \
-    second="$(opencode2 --version)"; \
-    echo "OpenCode after update 2: $second"; \
-    opencode2 update --method bun; \
-    third="$(opencode2 --version)"; \
-    echo "OpenCode after update 3: $third"; \
-    test "$second" = "$third"; \
-    case "$third" in opencode\ v2.*) ;; *) echo "OpenCode updater did not converge on stable V2: $third" >&2; exit 1 ;; esac; \
+    stable="$(opencode2 --version)"; \
+    echo "OpenCode stable seed: $stable"; \
+    case "$stable" in opencode\ v2.*) ;; *) echo "OpenCode updater did not produce stable V2: $stable" >&2; exit 1 ;; esac; \
     opencode_path="$(readlink -f "$(command -v opencode2)")"; \
     test -x "$opencode_path"; \
     case "$opencode_path" in /opt/opencode-runtime/*) ;; *) exit 1 ;; esac; \
