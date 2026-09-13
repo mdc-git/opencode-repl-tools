@@ -17,6 +17,7 @@ docker run --detach \
   --read-only \
   --cap-drop ALL \
   --cap-add CHOWN \
+  --cap-add DAC_OVERRIDE \
   --cap-add SETGID \
   --cap-add SETPCAP \
   --cap-add SETUID \

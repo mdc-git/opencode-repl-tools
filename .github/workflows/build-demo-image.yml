@@ -156,7 +156,7 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$name")" = "$runtime_volume"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
           cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$name")"
-          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+          for capability in CHOWN DAC_OVERRIDE SETGID SETPCAP SETUID SYS_ADMIN; do
             grep -Fq "\"$capability\"" <<<"$cap_add"
           done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name")"
@@ -313,7 +313,7 @@ jobs:
           test -z "$(docker inspect --format '{{range .Mounts}}{{if eq .Name "opencode-repl-tools-demo-update-cache"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$sandbox_name" | grep -Eq '"ALL"'
           cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$sandbox_name")"
-          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+          for capability in CHOWN DAC_OVERRIDE SETGID SETPCAP SETUID SYS_ADMIN; do
             grep -Fq "\"$capability\"" <<<"$cap_add"
           done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$sandbox_name")"

@@ -17,7 +17,7 @@ GitHub Codespace
   Docker child: trusted sandbox supervisor
   ├─ uid 0
   ├─ read-only root filesystem
-  ├─ setup capabilities only: CHOWN, SETGID, SETPCAP, SETUID, SYS_ADMIN
+  ├─ setup capabilities only: CHOWN, DAC_OVERRIDE, SETGID, SETPCAP, SETUID, SYS_ADMIN
   ├─ no_new_privileges
   ├─ private cgroup namespace
   ├─ bridge network
@@ -43,7 +43,7 @@ GitHub Codespace
   127.0.0.1:7681 → GitHub Codespaces port forwarding
 ```
 
-The controller owns Docker and GitHub authority. The Docker child has only the capabilities required to create the sandbox, prepare uid-1001 paths, and perform the one-shot identity/capability drop. It does not expose a shell or terminal before that drop. The public HTTP terminal, OpenCode process, plugin code, and visitor commands all run as uid/gid 1001 with an empty capability set inside Bubblewrap.
+The controller owns Docker and GitHub authority. The Docker child has only the capabilities required to create the sandbox, prepare and manage private uid-1001 paths, and perform the one-shot identity/capability drop. It does not expose a shell or terminal before that drop. The public HTTP terminal, OpenCode process, plugin code, and visitor commands all run as uid/gid 1001 with an empty capability set inside Bubblewrap.
 
 ## Image and runtime model
 
@@ -59,7 +59,7 @@ At Codespace start, `start-demo-sandbox.sh` pulls the demo image, recreates the 
 
 - uid/gid `0:0` for the trusted supervisor
 - read-only root filesystem
-- all capabilities dropped, then only `CHOWN`, `SETGID`, `SETPCAP`, `SETUID`, and `SYS_ADMIN` added
+- all capabilities dropped, then only `CHOWN`, `DAC_OVERRIDE`, `SETGID`, `SETPCAP`, `SETUID`, and `SYS_ADMIN` added
 - `no-new-privileges`
 - private cgroup namespace
 - PID limit 128
@@ -78,7 +78,7 @@ At Codespace start, `start-demo-sandbox.sh` pulls the demo image, recreates the 
 - read-only OpenCode runtime volume
 - bounded local Docker logs
 
-Docker's default seccomp and AppArmor profiles are disabled because the trusted supervisor must create the Bubblewrap mount/process namespaces. `CHOWN` is used only while constructing disposable uid-1001 paths. `SETUID`, `SETGID`, and `SETPCAP` are passed only to the one-shot `setpriv` process that changes identity and clears the capability bounding set. Visitor-controlled processes never run with supervisor capabilities.
+Docker's default seccomp and AppArmor profiles are disabled because the trusted supervisor must create the Bubblewrap mount/process namespaces. `CHOWN` and `DAC_OVERRIDE` are used only while constructing and cleaning up private uid-1001 session paths. `SETUID`, `SETGID`, and `SETPCAP` are passed only to the one-shot `setpriv` process that changes identity and clears the capability bounding set. Visitor-controlled processes never run with supervisor capabilities.
 
 The image strips SUID/SGID bits and removes world-writable permissions from immutable image content.
 
