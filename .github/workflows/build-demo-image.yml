@@ -92,6 +92,7 @@ jobs:
 
           test "$(docker exec "$name" /usr/bin/bwrap --version)" = "bubblewrap 0.12.0"
           docker exec "$name" test -x /usr/local/bin/opencode-ephemeral
+          docker exec "$name" test ! -e /usr/bin/tmux
 
           docker exec "$name" bash -ceu '
             workspace=/tmp/opencode-uid-smoke
@@ -109,7 +110,7 @@ jobs:
             chown -R 1001:1001 "$workspace"
             ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
             exec /usr/local/bin/opencode-ephemeral "$workspace" \
-              /bin/bash -ceu "tmux new-session -d -s opencode-smoke opencode2 --standalone /workspace; exec sleep 20"
+              /bin/bash -ceu "tail -f /dev/null | script -qfec \"opencode2 --standalone /workspace\" /dev/null"
           '
           sleep 5
 

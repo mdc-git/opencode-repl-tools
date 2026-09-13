@@ -37,14 +37,12 @@ while true; do
     /usr/local/bin/ttyd \
       --writable \
       --check-origin \
-      --max-clients 4 \
-      --exit-no-conn \
+      --once \
       --interface 0.0.0.0 \
       --port "$PORT" \
-      /usr/bin/tmux new-session -A -s opencode-demo \
-        opencode2 --standalone /workspace || true
+      opencode2 --standalone /workspace || true
 
   rm -rf "$SESSION_ROOT"
-  echo "ttyd exited; restarting with a fresh demo session" >&2
+  echo "ttyd exited; starting a fresh demo session" >&2
   sleep 1
 done
