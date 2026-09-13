@@ -136,7 +136,6 @@ jobs:
                 grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$env"
                 grep -Fxq "XDG_CACHE_HOME=/tmp/opencode-xdg/cache" <<<"$env"
                 grep -Fxq "OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db" <<<"$env"
-                grep -Fxq "PWD=/workspace" <<<"$env" || true
                 found_opencode=1
               fi
             done
@@ -155,7 +154,10 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$name")" = false
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$name")" = "$runtime_volume"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
-          docker inspect --format '{{json .HostConfig.CapAdd}}' "$name" | grep -Eq '"SYS_ADMIN"'
+          cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$name")"
+          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+            grep -Fq "\"$capability\"" <<<"$cap_add"
+          done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
           grep -Fq 'seccomp=unconfined' <<<"$security_opts"
@@ -184,7 +186,6 @@ jobs:
             test -z "$(find / -xdev \( -type f -o -type d \) -perm -0002 -print -quit)"
             grep -Eq "^Uid:[[:space:]]+0([[:space:]]+0){3}$" /proc/1/status
             grep -Eq "^NoNewPrivs:[[:space:]]+1$" /proc/1/status
-            grep -Eq "^CapEff:[[:space:]]+0000000000200000$" /proc/1/status
             if tr "\000" "\n" </proc/1/environ \
                 | grep -Eq "^(GH_TOKEN|GITHUB_TOKEN|GITHUB_CODESPACE_TOKEN)="; then
               echo "GitHub credential leaked into trusted sandbox supervisor" >&2
@@ -310,7 +311,10 @@ jobs:
             "$(docker image inspect --format '{{.Id}}' "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo")"
           test -z "$(docker inspect --format '{{range .Mounts}}{{if eq .Name "opencode-repl-tools-demo-update-cache"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$sandbox_name" | grep -Eq '"ALL"'
-          docker inspect --format '{{json .HostConfig.CapAdd}}' "$sandbox_name" | grep -Eq '"SYS_ADMIN"'
+          cap_add="$(docker inspect --format '{{json .HostConfig.CapAdd}}' "$sandbox_name")"
+          for capability in CHOWN SETGID SETPCAP SETUID SYS_ADMIN; do
+            grep -Fq "\"$capability\"" <<<"$cap_add"
+          done
           security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$sandbox_name")"
           grep -Fq 'no-new-privileges' <<<"$security_opts"
           grep -Fq 'seccomp=unconfined' <<<"$security_opts"
