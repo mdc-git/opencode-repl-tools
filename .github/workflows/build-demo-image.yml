@@ -93,7 +93,7 @@ jobs:
 
           docker exec "$name" test -x /usr/bin/bwrap
           docker exec "$name" test -x /usr/local/bin/opencode-ephemeral
-          docker exec "$name" sh -ceu '
+          docker exec "$name" bash -ceu '
             export HOME=/home/opencode-demo
             export TMUX_TMPDIR=$HOME/tmux
             export PATH=/opt/opencode-runtime/bin:/usr/local/bin:/usr/bin:/bin
