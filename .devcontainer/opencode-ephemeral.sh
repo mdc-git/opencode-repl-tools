@@ -67,8 +67,11 @@ bwrap \
   --symlink opencode2 /tmp/opencode-xdg/bin/opencode \
   --ro-bind "$python_cache" /tmp/opencode-xdg/cache/opencode/repl-tools/python \
   --bind "$workspace" "$sandbox_workspace" \
-  --dev /dev \
+  --dev-bind /dev /dev \
   --proc /proc \
+  --cap-add CAP_SETGID \
+  --cap-add CAP_SETPCAP \
+  --cap-add CAP_SETUID \
   --clearenv \
   --setenv HOME /home/opencode-demo \
   --setenv USER opencode-demo \
