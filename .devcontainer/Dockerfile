@@ -4,6 +4,8 @@ ARG NODE_IMAGE=node:26.8.2-bookworm-slim
 ARG BUN_IMAGE=oven/bun:1
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
+ARG BUBBLEWRAP_VERSION=0.12.0
+ARG BUBBLEWRAP_SHA256=9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314
 ARG OPENCODE_UPDATE_CACHE_KEY=local
 
 FROM ${NODE_IMAGE} AS node-runtime
@@ -28,6 +30,39 @@ RUN set -eux; \
     curl -fsSL "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64" -o /tmp/ttyd; \
     grep ' ttyd.x86_64$' /tmp/ttyd-checksums | sed 's#ttyd.x86_64#/tmp/ttyd#' | sha256sum -c -; \
     install -D -m 0755 /tmp/ttyd /opt/ttyd/ttyd
+
+FROM ${RUNTIME_IMAGE} AS bubblewrap-tooling
+ARG BUBBLEWRAP_VERSION
+ARG BUBBLEWRAP_SHA256
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      build-essential \
+      ca-certificates \
+      curl \
+      libcap-dev \
+      meson \
+      ninja-build \
+      pkg-config \
+      xz-utils
+RUN set -eux; \
+    curl -fsSL \
+      "https://github.com/containers/bubblewrap/releases/download/v${BUBBLEWRAP_VERSION}/bubblewrap-${BUBBLEWRAP_VERSION}.tar.xz" \
+      -o /tmp/bubblewrap.tar.xz; \
+    printf '%s  %s\n' "$BUBBLEWRAP_SHA256" /tmp/bubblewrap.tar.xz | sha256sum -c -; \
+    mkdir /tmp/bubblewrap-src; \
+    tar -xJf /tmp/bubblewrap.tar.xz -C /tmp/bubblewrap-src --strip-components=1; \
+    meson setup /tmp/bubblewrap-src/_build /tmp/bubblewrap-src \
+      -Dselinux=disabled \
+      -Dman=disabled \
+      -Dbash_completion=disabled \
+      -Dzsh_completion=disabled \
+      -Dtests=false; \
+    meson compile -C /tmp/bubblewrap-src/_build; \
+    install -D -m 0755 /tmp/bubblewrap-src/_build/bwrap /opt/bubblewrap/bwrap; \
+    /opt/bubblewrap/bwrap --version | grep -Fx 'bubblewrap 0.12.0'
 
 FROM bun-runtime AS opencode-tooling
 ARG OPENCODE_UPDATE_CACHE_KEY
@@ -80,9 +115,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends \
-      bubblewrap \
       ca-certificates \
       libatomic1 \
+      libcap2 \
       libstdc++6 \
       python3 \
       tmux \
@@ -102,6 +137,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     find / -xdev \( -type f -o -type d \) -perm -0002 -exec chmod o-w {} +
 
 FROM runtime-base AS final
+COPY --chmod=0755 --from=bubblewrap-tooling /opt/bubblewrap/bwrap /usr/bin/bwrap
 COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 COPY --from=ttyd-tooling /opt/ttyd/ttyd /usr/local/bin/ttyd
@@ -110,11 +146,10 @@ COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/openco
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/opencode-ephemeral.sh /usr/local/bin/opencode-ephemeral
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
-COPY --chmod=0755 .devcontainer/run-demo-session.sh /usr/local/bin/run-demo-session
 COPY package.json bun.lock README.md /opt/opencode-demo/source/
 COPY .opencode/ /opt/opencode-demo/source/.opencode/
 COPY plugins/ /opt/opencode-demo/source/plugins/
 ENV HOME=/home/opencode-demo
 WORKDIR /home/opencode-demo
-USER opencode-demo
+USER root
 CMD ["/usr/local/bin/run-demo-container"]
