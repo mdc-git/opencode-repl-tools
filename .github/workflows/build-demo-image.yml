@@ -8,6 +8,7 @@ on:
       - .devcontainer/Dockerfile
       - .devcontainer/controller.Dockerfile
       - .devcontainer/devcontainer.json
+      - .devcontainer/opencode-ephemeral.sh
       - .devcontainer/run-demo-container.sh
       - .devcontainer/run-demo-session.sh
       - .devcontainer/run-demo-sandbox.sh
@@ -90,6 +91,8 @@ jobs:
           esac
           printf 'baked OpenCode seed: %s\n' "$seed_version"
 
+          docker exec "$name" test -x /usr/bin/bwrap
+          docker exec "$name" test -x /usr/local/bin/opencode-ephemeral
           docker exec "$name" sh -ceu '
             export HOME=/home/opencode-demo
             export TMUX_TMPDIR=$HOME/tmux
@@ -106,6 +109,25 @@ jobs:
               exit 1
             fi
 
+            found_bwrap=
+            found_opencode=
+            for proc in /proc/[0-9]*; do
+              comm="$(cat "$proc/comm" 2>/dev/null || true)"
+              if [ "$comm" = bwrap ]; then
+                found_bwrap=1
+              fi
+              if [ "$comm" = opencode2 ]; then
+                env="$(tr "\000" "\n" <"$proc/environ" 2>/dev/null || true)"
+                grep -Fxq "XDG_CONFIG_HOME=/tmp/opencode-xdg/config" <<<"$env"
+                grep -Fxq "XDG_DATA_HOME=/tmp/opencode-xdg/data" <<<"$env"
+                grep -Fxq "XDG_CACHE_HOME=/tmp/opencode-xdg/cache" <<<"$env"
+                grep -Fxq "OPENCODE_DB=/tmp/opencode-xdg/data/opencode/opencode.db" <<<"$env"
+                found_opencode=1
+              fi
+            done
+            test "$found_bwrap" = 1
+            test "$found_opencode" = 1
+
             tmux kill-session -t opencode-smoke
             rm -rf "$HOME/session" "$HOME/.session.lock"
           '
@@ -121,7 +143,10 @@ jobs:
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.RW}}{{end}}{{end}}' "$name")" = false
           test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/opt/opencode-runtime"}}{{.Name}}{{end}}{{end}}' "$name")" = "$runtime_volume"
           docker inspect --format '{{json .HostConfig.CapDrop}}' "$name" | grep -Eq '"ALL"'
-          docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name" | grep -Eq 'no-new-privileges'
+          security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$name")"
+          grep -Fq 'no-new-privileges' <<<"$security_opts"
+          grep -Fq 'seccomp=unconfined' <<<"$security_opts"
+          grep -Fq 'apparmor=unconfined' <<<"$security_opts"
           test "$(docker inspect --format '{{json .HostConfig.Binds}}' "$name")" = null
 
           if docker inspect --format '{{json .Config.Env}}' "$name" \
@@ -196,6 +221,8 @@ jobs:
             gh --version
             git --version
             curl --version >/dev/null
+            bwrap --version
+            test -x /usr/local/bin/opencode-ephemeral
             test -x /usr/local/bin/run-demo-sandbox
             test -x /usr/local/bin/start-demo-sandbox
             test -x /usr/local/bin/publish-demo
@@ -272,6 +299,10 @@ jobs:
           test "$(docker inspect --format '{{.Image}}' "$sandbox_name")" = \
             "$(docker image inspect --format '{{.Id}}' "ghcr.io/${{ github.repository_owner }}/opencode-repl-tools-demo:demo")"
           test -z "$(docker inspect --format '{{range .Mounts}}{{if eq .Name "opencode-repl-tools-demo-update-cache"}}{{.Name}}{{end}}{{end}}' "$sandbox_name")"
+          security_opts="$(docker inspect --format '{{json .HostConfig.SecurityOpt}}' "$sandbox_name")"
+          grep -Fq 'no-new-privileges' <<<"$security_opts"
+          grep -Fq 'seccomp=unconfined' <<<"$security_opts"
+          grep -Fq 'apparmor=unconfined' <<<"$security_opts"
           docker volume inspect "$update_cache_volume" >/dev/null
           test -z "$(docker ps --filter "name=^/${updater_name}$" --format '{{.ID}}')"
 
