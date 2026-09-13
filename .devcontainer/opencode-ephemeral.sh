@@ -29,6 +29,7 @@ install -d -o 1001 -g 1001 -m 0700 \
   "$state_root/xdg/bin" \
   "$state_root/xdg/config/opencode" \
   "$state_root/xdg/data/opencode" \
+  "$state_root/xdg/cache/opencode" \
   "$state_root/xdg/cache/opencode/repl-tools" \
   "$state_root/xdg/state/opencode" \
   "$state_root/xdg/npm"
