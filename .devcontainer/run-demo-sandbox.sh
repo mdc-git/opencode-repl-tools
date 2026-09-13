@@ -16,6 +16,10 @@ docker run --detach \
   --user 0:0 \
   --read-only \
   --cap-drop ALL \
+  --cap-add CHOWN \
+  --cap-add SETGID \
+  --cap-add SETPCAP \
+  --cap-add SETUID \
   --cap-add SYS_ADMIN \
   --security-opt no-new-privileges:true \
   --security-opt seccomp=unconfined \
