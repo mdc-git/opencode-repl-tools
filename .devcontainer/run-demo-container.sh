@@ -38,7 +38,6 @@ while true; do
     /usr/local/bin/ttyd \
       --writable \
       --check-origin \
-      --once \
       --interface 0.0.0.0 \
       --port "$PORT" \
       opencode2 --standalone /workspace || true
