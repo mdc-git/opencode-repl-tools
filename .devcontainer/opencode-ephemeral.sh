@@ -21,8 +21,6 @@ trap cleanup EXIT
 
 install -d -o 1001 -g 1001 -m 0700 \
   "$state_root/home" \
-  "$state_root/home/.agents" \
-  "$state_root/home/.claude" \
   "$state_root/home/.config/opencode" \
   "$state_root/home/.local/share/opencode/log" \
   "$state_root/home/.local/state/opencode" \
@@ -68,6 +66,7 @@ bwrap \
   --ro-bind /sys /sys \
   --perms 1777 \
   --tmpfs /tmp \
+  --dir /home \
   --dir /run/user \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
