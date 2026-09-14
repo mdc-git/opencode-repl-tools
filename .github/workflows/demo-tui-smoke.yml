@@ -1,0 +1,58 @@
+name: Demo TUI smoke
+
+on:
+  pull_request:
+    paths:
+      - .devcontainer/Dockerfile
+      - .devcontainer/opencode-ephemeral.sh
+      - .devcontainer/run-demo-container.sh
+      - .devcontainer/run-demo-sandbox.sh
+      - .devcontainer/smoke-demo-tui.sh
+      - .opencode/**
+      - plugins/**
+      - package.json
+      - bun.lock
+      - .github/workflows/demo-tui-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build sandbox image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .devcontainer/Dockerfile
+          load: true
+          push: false
+          tags: opencode-repl-tools-demo:tui-smoke
+          build-args: |
+            OPENCODE_UPDATE_CACHE_KEY=${{ github.run_id }}-${{ github.run_attempt }}
+          cache-from: type=gha,scope=sandbox
+          provenance: false
+
+      - name: Smoke test staged standalone TUI
+        shell: bash
+        run: |
+          set -euo pipefail
+          name=opencode-repl-tools-demo-tui-smoke
+          runtime_volume=opencode-repl-tools-demo-tui-smoke-runtime
+          docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true
+          docker volume create "$runtime_volume" >/dev/null
+          .devcontainer/run-demo-sandbox.sh \
+            opencode-repl-tools-demo:tui-smoke \
+            "$name" \
+            127.0.0.1:7682 \
+            "$runtime_volume"
+          trap 'docker logs "$name" || true; docker rm --force "$name" >/dev/null 2>&1 || true; docker volume rm --force "$runtime_volume" >/dev/null 2>&1 || true' EXIT
+          docker exec "$name" /usr/local/bin/smoke-demo-tui

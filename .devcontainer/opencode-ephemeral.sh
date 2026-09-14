@@ -66,6 +66,7 @@ bwrap \
   --ro-bind /sys /sys \
   --perms 1777 \
   --tmpfs /tmp \
+  --dir /home \
   --dir /run/user \
   --bind "$state_root/home" /home/opencode-demo \
   --bind "$state_root/xdg" /tmp/opencode-xdg \
