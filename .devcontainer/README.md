@@ -35,13 +35,13 @@ GitHub Codespace
   ├─ no Linux capabilities
   ├─ no_new_privileges
   ├─ disposable Bubblewrap home/state
+  ├─ staged writable /workspace
   ├─ read-only system/runtime assets
   └─ ttyd :7681
        └─ one run-demo-client per browser connection
-            ├─ private /tmp/opencode-client.XXXXXX root
-            ├─ private HOME/XDG/database/cache/state/config
-            ├─ private writable workspace
-            └─ OpenCode V2
+            ├─ private /tmp/opencode-client.XXXXXX state root
+            ├─ private OpenCode XDG/database/cache/state/config
+            └─ OpenCode V2 on shared /workspace
              │
              ▼
   127.0.0.1:7681 → GitHub Codespaces port forwarding
@@ -88,7 +88,7 @@ The image strips SUID/SGID bits and removes world-writable permissions from immu
 
 ## Session lifecycle
 
-`run-demo-container.sh` starts from a sanitized environment, creates the long-lived Bubblewrap sandbox, drops to uid/gid 1001 with zero capabilities, and starts one ttyd listener with no client-count limit.
+`run-demo-container.sh` starts from a sanitized environment, stages the baked source snapshot into `/workspace`, creates the long-lived Bubblewrap sandbox, drops to uid/gid 1001 with zero capabilities, and starts one ttyd listener with no client-count limit.
 
 The public process tree is:
 
@@ -98,12 +98,14 @@ run-demo-container        trusted root supervisor
        └─ bwrap
             └─ setpriv uid=1001 gid=1001 caps=none
                  └─ ttyd :7681
-                      ├─ run-demo-client → opencode2 --standalone <client workspace>
-                      ├─ run-demo-client → opencode2 --standalone <client workspace>
+                      ├─ run-demo-client → opencode2 --standalone /workspace
+                      ├─ run-demo-client → opencode2 --standalone /workspace
                       └─ ...
 ```
 
-For every ttyd connection, `run-demo-client.sh` creates a unique `/tmp/opencode-client.XXXXXX` root inside the Bubblewrap tmpfs. It copies the baked source snapshot into that client's writable workspace, links immutable Node dependencies and the read-only prebuilt Python REPL cache, starts OpenCode, and deletes the entire client root when the connection ends. Browser clients do not share an OpenCode process, database, writable cache, state directory, config directory, home directory, temp directory, or workspace.
+For every ttyd connection, `run-demo-client.sh` creates a unique `/tmp/opencode-client.XXXXXX` state root inside the Bubblewrap tmpfs, points OpenCode's writable XDG/config/data/cache/state/database paths into it, starts OpenCode against the existing `/workspace`, and deletes the client state root when the connection ends. Browser clients do not share an OpenCode process, database, writable cache, state directory, or generated global config directory.
+
+`HOME=/home/opencode-demo`, `TMPDIR=/tmp`, and `/workspace` remain the established Bubblewrap-level paths shared by concurrent clients. The shared workspace means concurrent visitors can observe or modify the same project files; per-client OpenCode state isolation is not a hostile-client filesystem boundary.
 
 ## Per-client OpenCode state
 
@@ -111,8 +113,6 @@ Each client receives its own generated prefix:
 
 ```text
 CLIENT_ROOT=/tmp/opencode-client.XXXXXX
-HOME=$CLIENT_ROOT/home
-TMPDIR=$CLIENT_ROOT/tmp
 XDG_CONFIG_HOME=$CLIENT_ROOT/xdg/config
 XDG_DATA_HOME=$CLIENT_ROOT/xdg/data
 XDG_CACHE_HOME=$CLIENT_ROOT/xdg/cache
@@ -122,9 +122,9 @@ OPENCODE_DB=$CLIENT_ROOT/xdg/data/opencode/opencode.db
 NPM_CONFIG_CACHE=$CLIENT_ROOT/xdg/npm
 ```
 
-The checked-in project configuration is copied into each private workspace, so its local `"./"` plugin entry continues to resolve to the bundled REPL plugin source. The prebuilt Python REPL cache is the only cache subtree deliberately shared between clients, and it is mounted/read through an immutable image path. Node dependencies are also shared read-only. All generated OpenCode database, cache, state, configuration, home, temp, and project files are client-local and disappear when that client's launcher exits.
+The checked-in project configuration remains in the staged `/workspace`, so its local `"./"` plugin entry continues to resolve to the bundled REPL plugin source. The prebuilt Python REPL cache is deliberately shared read-only through the existing sandbox cache path, and Node dependencies are shared read-only. Generated OpenCode database, cache, state, and global configuration files are client-local and disappear when that client's launcher exits.
 
-`opencode-ephemeral.sh` still supplies a disposable Bubblewrap-level home/XDG environment for direct sandbox commands and smoke probes. Public OpenCode clients override those writable paths with their own per-connection prefix before OpenCode starts.
+`opencode-ephemeral.sh` supplies the disposable Bubblewrap-level HOME, TMPDIR, and baseline XDG environment. Public OpenCode clients override only the writable OpenCode/XDG state paths that need per-connection separation.
 
 ## Network model
 
@@ -139,17 +139,18 @@ Codespaces forwards the loopback listener and provides the public HTTPS endpoint
 - OpenCode V2 seed availability
 - exactly Bubblewrap 0.12.0
 - successful execution of a command as uid 1001 through `opencode-ephemeral`
-- a real OpenCode TUI process inside Bubblewrap
-- two client launches inside one Bubblewrap sandbox receiving different `/tmp/opencode-client.*` roots
-- client-local HOME, TMPDIR, XDG config/data/cache/state, `OPENCODE_CONFIG_DIR`, `OPENCODE_DB`, and npm cache paths
-- removal of client roots after their launchers exit
+- a real OpenCode TUI process through `run-demo-client` inside Bubblewrap
+- two client launches inside one Bubblewrap sandbox receiving different `/tmp/opencode-client.*` state roots
+- client-local XDG config/data/cache/state, `OPENCODE_CONFIG_DIR`, `OPENCODE_DB`, and npm cache paths
+- unchanged Bubblewrap-level HOME, TMPDIR, and `/workspace`
+- removal of client state roots after their launchers exit
 - uid 1001 and zero inheritable, permitted, effective, bounding, and ambient capabilities for public processes
 - the explicit supervisor setup-capability allowlist
 - read-only rootfs and runtime volume
 - resource limits, bridge networking, and private cgroup namespace
 - required Docker seccomp/AppArmor settings
 - absence of host binds, Docker socket, controller checkout, and GitHub credentials
-- read-only source, dependencies, and Python cache
+- read-only source dependencies and Python cache
 - absence of SUID/SGID and world-writable immutable image content
 
 Only after the sandbox passes is the demo image published. The controller image is then built from that validated image and exercised through the Dev Container CLI, including the startup updater and end-to-end listener.
@@ -158,7 +159,7 @@ Only after the sandbox passes is the demo image published. The controller image 
 
 The controller/public-child split protects the repository checkout, GitHub credentials, Docker authority, and controller filesystem. Bubblewrap separates all visitor-controlled processes from the Docker supervisor's setup capabilities and gives OpenCode a disposable filesystem/process view.
 
-Concurrent browser sessions use distinct generated state paths but run under the same uid inside the same Bubblewrap namespace. The per-client prefixes prevent normal OpenCode state/cache/database reuse; they are not an additional hostile-client security boundary between sessions. The child and controller still share the Codespace host kernel. A kernel or container-runtime escape can cross the intended boundary. Outbound networking is intentionally available.
+Concurrent browser sessions use distinct OpenCode state paths but run under the same uid inside the same Bubblewrap namespace and share `/workspace`. The per-client prefixes prevent normal OpenCode state/cache/database reuse; they are not an additional hostile-client security boundary between sessions. The child and controller still share the Codespace host kernel. A kernel or container-runtime escape can cross the intended boundary. Outbound networking is intentionally available.
 
 ## File map
 
@@ -167,7 +168,7 @@ Concurrent browser sessions use distinct generated state paths but run under the
 - `Dockerfile` builds the public runtime, pinned Bubblewrap, OpenCode bootstrap, plugin dependencies, Python cache, and source snapshot.
 - `start-demo-sandbox.sh` updates and verifies OpenCode, recreates the Docker child, and waits for readiness.
 - `run-demo-sandbox.sh` defines the outer Docker security, resource, filesystem, network, and logging boundary.
-- `run-demo-container.sh` starts the long-lived Bubblewrap/ttyd listener.
-- `run-demo-client.sh` creates and removes one private OpenCode state/workspace prefix per ttyd connection.
-- `opencode-ephemeral.sh` creates the Bubblewrap namespace/filesystem boundary, drops public privileges, and supplies disposable sandbox-level OpenCode state.
+- `run-demo-container.sh` stages `/workspace` and starts the long-lived Bubblewrap/ttyd listener.
+- `run-demo-client.sh` creates and removes one private OpenCode writable-state prefix per ttyd connection.
+- `opencode-ephemeral.sh` creates the Bubblewrap namespace/filesystem boundary, drops public privileges, and supplies disposable sandbox-level state.
 - `publish-demo.sh` publishes and verifies the ready Codespaces port.
