@@ -11,6 +11,29 @@ chown -R 1001:1001 "$workspace"
 ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
 
 /usr/local/bin/opencode-ephemeral "$workspace" /bin/bash -ceu '
+  probe_network() {
+    /usr/local/bin/bun -e '\''
+      const response = await fetch("https://opencode.ai", {
+        method: "HEAD",
+        signal: AbortSignal.timeout(10000),
+      })
+      console.log(`direct:${response.status}`)
+    '\''
+  }
+
+  probe_client_network() {
+    /usr/local/bin/run-demo-client /usr/local/bin/bun -e '\''
+      const response = await fetch("https://opencode.ai", {
+        method: "HEAD",
+        signal: AbortSignal.timeout(10000),
+      })
+      console.log(`client:${response.status}`)
+    '\''
+  }
+
+  probe_network
+  probe_client_network
+
   probe_client() {
     /usr/local/bin/run-demo-client /bin/sh -ceu '\''
       printf "%s|%s|%s|%s|%s|%s|%s|%s|%s\n" \
