@@ -11,34 +11,12 @@ chown -R 1001:1001 "$workspace"
 ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
 
 /usr/local/bin/opencode-ephemeral "$workspace" /bin/bash -ceu '
-  probe_network() {
-    /usr/local/bin/bun -e '\''
-      const response = await fetch("https://opencode.ai", {
-        method: "HEAD",
-        signal: AbortSignal.timeout(10000),
-      })
-      console.log(`direct:${response.status}`)
-    '\''
-  }
-
-  probe_client_network() {
-    /usr/local/bin/run-demo-client /usr/local/bin/bun -e '\''
-      const response = await fetch("https://opencode.ai", {
-        method: "HEAD",
-        signal: AbortSignal.timeout(10000),
-      })
-      console.log(`client:${response.status}`)
-    '\''
-  }
-
-  probe_network
-  probe_client_network
-
   probe_client() {
     /usr/local/bin/run-demo-client /bin/sh -ceu '\''
-      printf "%s|%s|%s|%s|%s|%s|%s|%s|%s\n" \
+      printf "%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n" \
         "$HOME" \
         "$TMPDIR" \
+        "$PWD" \
         "$XDG_CONFIG_HOME" \
         "$XDG_DATA_HOME" \
         "$XDG_CACHE_HOME" \
@@ -54,13 +32,15 @@ ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
   test "$first" != "$second"
 
   for probe in "$first" "$second"; do
-    IFS="|" read -r home tmp config data cache state config_dir db npm <<EOF
+    IFS="|" read -r home tmp cwd config data cache state config_dir db npm <<EOF
 $probe
 EOF
-    root="${home%/home}"
+    test "$home" = /home/opencode-demo
+    test "$tmp" = /tmp
+    test "$cwd" = /workspace
+
+    root="${config%/xdg/config}"
     case "$root" in /tmp/opencode-client.*) ;; *) exit 1 ;; esac
-    test "$tmp" = "$root/tmp"
-    test "$config" = "$root/xdg/config"
     test "$data" = "$root/xdg/data"
     test "$cache" = "$root/xdg/cache"
     test "$state" = "$root/xdg/state"
@@ -74,7 +54,7 @@ EOF
 set +e
 timeout --signal=TERM --kill-after=2s 8s \
   script -qefc \
-    "/usr/local/bin/opencode-ephemeral '$workspace' /usr/bin/env OPENCODE_PRINT_LOGS=1 TERM=xterm-256color opencode2 --standalone /workspace" \
+    "/usr/local/bin/opencode-ephemeral '$workspace' /usr/bin/env OPENCODE_PRINT_LOGS=1 TERM=xterm-256color /usr/local/bin/run-demo-client" \
     "$capture"
 status=$?
 set -e
