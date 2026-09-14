@@ -10,17 +10,6 @@ chmod -R u+rwX,go-rwx "$workspace"
 chown -R 1001:1001 "$workspace"
 ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
 
-/usr/local/bin/opencode-ephemeral "$workspace" /bin/sh -ceu '
-  id
-  stat -c "%u:%g %a %n" \
-    /home \
-    /home/opencode-demo \
-    /home/opencode-demo/.claude \
-    /home/opencode-demo/.agents
-  readlink -f /home/opencode-demo/.claude
-  readlink -f /home/opencode-demo/.agents
-'
-
 set +e
 timeout --signal=TERM --kill-after=2s 8s \
   script -qefc \
