@@ -140,6 +140,7 @@ COPY --chmod=0755 --from=opencode-tooling /opt/opencode-bootstrap/opencode2 /opt
 COPY --from=node-dependencies /opt/opencode-repl-tools/node_modules/ /opt/opencode-repl-tools/node_modules/
 COPY --from=python-dependencies /opt/opencode-repl-cache/ /opt/opencode-repl-cache/
 COPY --chmod=0755 .devcontainer/opencode-ephemeral.sh /usr/local/bin/opencode-ephemeral
+COPY --chmod=0755 .devcontainer/run-demo-client.sh /usr/local/bin/run-demo-client
 COPY --chmod=0755 .devcontainer/run-demo-container.sh /usr/local/bin/run-demo-container
 COPY --chmod=0755 .devcontainer/smoke-demo-tui.sh /usr/local/bin/smoke-demo-tui
 COPY package.json bun.lock README.md /opt/opencode-demo/source/
