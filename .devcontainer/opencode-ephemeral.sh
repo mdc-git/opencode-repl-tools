@@ -62,6 +62,8 @@ bwrap \
   --symlink usr/sbin /sbin \
   --symlink usr/lib /lib \
   --symlink usr/lib64 /lib64 \
+  --perms 0755 \
+  --dir /etc \
   "${system_mounts[@]}" \
   --ro-bind /sys /sys \
   --perms 1777 \
