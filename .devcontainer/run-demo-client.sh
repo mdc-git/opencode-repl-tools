@@ -23,7 +23,7 @@ install -d -m 0700 \
   "$xdg/state/opencode" \
   "$xdg/npm"
 
-cp -a /opt/opencode-demo/source/. "$workspace/"
+cp -a --no-preserve=ownership /opt/opencode-demo/source/. "$workspace/"
 chmod -R u+rwX,go-rwx "$workspace"
 ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
 ln -s /tmp/opencode-xdg/cache/opencode/repl-tools/python \
@@ -40,4 +40,8 @@ export OPENCODE_DB="$xdg/data/opencode/opencode.db"
 export NPM_CONFIG_CACHE="$xdg/npm"
 
 cd "$workspace"
-exec opencode2 --standalone "$workspace"
+if (( $# == 0 )); then
+  set -- opencode2 --standalone "$workspace"
+fi
+
+"$@"
