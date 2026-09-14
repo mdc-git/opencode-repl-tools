@@ -21,6 +21,8 @@ trap cleanup EXIT
 
 install -d -o 1001 -g 1001 -m 0700 \
   "$state_root/home" \
+  "$state_root/home/.agents" \
+  "$state_root/home/.claude" \
   "$state_root/home/.config/opencode" \
   "$state_root/home/.local/share/opencode/log" \
   "$state_root/home/.local/state/opencode" \
