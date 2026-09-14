@@ -9,6 +9,7 @@ on:
       - .devcontainer/controller.Dockerfile
       - .devcontainer/devcontainer.json
       - .devcontainer/opencode-ephemeral.sh
+      - .devcontainer/run-demo-client.sh
       - .devcontainer/run-demo-container.sh
       - .devcontainer/run-demo-sandbox.sh
       - .devcontainer/smoke-demo-tui.sh
@@ -95,6 +96,7 @@ jobs:
           printf 'bubblewrap runtime: %s\n' "$bubblewrap_version"
           test "$bubblewrap_version" = "bubblewrap 0.12.0"
           docker exec "$name" test -x /usr/local/bin/opencode-ephemeral
+          docker exec "$name" test -x /usr/local/bin/run-demo-client
           docker exec "$name" test -x /usr/local/bin/smoke-demo-tui
           docker exec "$name" test ! -e /usr/bin/tmux
           echo 'sandbox runtime assets verified'
@@ -233,6 +235,7 @@ jobs:
             curl --version >/dev/null
             test "$(bwrap --version)" = "bubblewrap 0.12.0"
             test -x /usr/local/bin/opencode-ephemeral
+            test -x /usr/local/bin/run-demo-client
             test -x /usr/local/bin/run-demo-sandbox
             test -x /usr/local/bin/start-demo-sandbox
             test -x /usr/local/bin/publish-demo
