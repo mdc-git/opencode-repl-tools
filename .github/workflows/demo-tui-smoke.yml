@@ -5,6 +5,7 @@ on:
     paths:
       - .devcontainer/Dockerfile
       - .devcontainer/opencode-ephemeral.sh
+      - .devcontainer/run-demo-client.sh
       - .devcontainer/run-demo-container.sh
       - .devcontainer/run-demo-sandbox.sh
       - .devcontainer/smoke-demo-tui.sh
