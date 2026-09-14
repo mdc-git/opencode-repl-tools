@@ -10,6 +10,44 @@ chmod -R u+rwX,go-rwx "$workspace"
 chown -R 1001:1001 "$workspace"
 ln -s /opt/opencode-repl-tools/node_modules "$workspace/node_modules"
 
+/usr/local/bin/opencode-ephemeral "$workspace" /bin/bash -ceu '
+  probe_client() {
+    /usr/local/bin/run-demo-client /bin/sh -ceu '\''
+      printf "%s|%s|%s|%s|%s|%s|%s|%s|%s\n" \
+        "$HOME" \
+        "$TMPDIR" \
+        "$XDG_CONFIG_HOME" \
+        "$XDG_DATA_HOME" \
+        "$XDG_CACHE_HOME" \
+        "$XDG_STATE_HOME" \
+        "$OPENCODE_CONFIG_DIR" \
+        "$OPENCODE_DB" \
+        "$NPM_CONFIG_CACHE"
+    '\''
+  }
+
+  first="$(probe_client)"
+  second="$(probe_client)"
+  test "$first" != "$second"
+
+  for probe in "$first" "$second"; do
+    IFS="|" read -r home tmp config data cache state config_dir db npm <<EOF
+$probe
+EOF
+    root="${home%/home}"
+    case "$root" in /tmp/opencode-client.*) ;; *) exit 1 ;; esac
+    test "$tmp" = "$root/tmp"
+    test "$config" = "$root/xdg/config"
+    test "$data" = "$root/xdg/data"
+    test "$cache" = "$root/xdg/cache"
+    test "$state" = "$root/xdg/state"
+    test "$config_dir" = "$root/xdg/config/opencode"
+    test "$db" = "$root/xdg/data/opencode/opencode.db"
+    test "$npm" = "$root/xdg/npm"
+    test ! -e "$root"
+  done
+'
+
 set +e
 timeout --signal=TERM --kill-after=2s 8s \
   script -qefc \
