@@ -39,8 +39,8 @@ jobs:
         run: |
           node -e "
           const pkg = require('./package.json')
-          if (pkg.dependencies?.['@opencode/plugin'] !== 'beta') {
-            throw new Error('@opencode/plugin must remain exactly beta')
+          if (pkg.dependencies?.['@opencode/plugin'] !== 'latest') {
+            throw new Error('@opencode/plugin must remain exactly latest')
           }
           "
 

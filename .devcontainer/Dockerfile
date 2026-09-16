@@ -73,7 +73,7 @@ ENV BUN_INSTALL=/opt/opencode-runtime \
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     set -eux; \
     test -n "$OPENCODE_UPDATE_CACHE_KEY"; \
-    bun install --global --trust "@opencode/cli@beta"; \
+    bun install --global --trust "@opencode/cli@latest"; \
     echo "OpenCode bootstrap: $(opencode2 --version)"; \
     opencode2 update --method bun; \
     echo "OpenCode after update 1: $(opencode2 --version)"; \

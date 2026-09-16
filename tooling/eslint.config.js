@@ -67,9 +67,9 @@ const config = defineConfig([
   {
     files: ['**/package.json'],
     rules: {
-      // Required by the OpenCode beta deployment contract.
+      // Required by the OpenCode latest deployment contract.
       'package-json/no-dist-tag-dependencies': 'off',
-      // Effect must stay pinned to the version source-gated against OpenCode beta.
+      // Effect must stay pinned to the version required by the OpenCode SDK.
       'package-json/dependency-version-range': [
         'error',
         { range: 'caret', exceptions: ['effect'] }

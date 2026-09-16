@@ -14,7 +14,7 @@
     "plugins"
   ],
   "dependencies": {
-    "@opencode/plugin": "beta",
+    "@opencode/plugin": "latest",
     "effect": "4.0.0-rc.112",
     "typescript": "^6.0.3"
   },
