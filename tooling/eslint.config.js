@@ -5,7 +5,7 @@ import boundaries from 'eslint-plugin-boundaries'
 import sonarjs from 'eslint-plugin-sonarjs'
 
 const projectFiles = ['**/*.{js,mjs,cjs,ts}']
-const replFiles = ['plugins/repl/**/*.{ts,mjs}']
+const replFiles = ['plugins/repl-tools/**/*.{ts,mjs}']
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
 
 const noFunctionScopedDynamicLoads = [
@@ -99,7 +99,7 @@ const config = defineConfig([
     }
   },
   {
-    files: ['plugins/repl/**/*.ts'],
+    files: ['plugins/repl-tools/**/*.ts'],
     languageOptions: {
       parserOptions: {
         project: './tooling/tsconfig.json',
@@ -121,19 +121,19 @@ const config = defineConfig([
     settings: {
       'boundaries/files-single-match': true,
       'boundaries/files': [
-        { pattern: 'plugins/repl/index.ts', category: 'entry' },
+        { pattern: 'plugins/repl-tools/index.ts', category: 'entry' },
         {
           pattern: [
-            'plugins/repl/src/runtime.ts',
-            'plugins/repl/src/runtime/**/*.ts',
-            'plugins/repl/src/output-ring.ts'
+            'plugins/repl-tools/src/runtime.ts',
+            'plugins/repl-tools/src/runtime/**/*.ts',
+            'plugins/repl-tools/src/output-ring.ts'
           ],
           category: 'core'
         },
-        { pattern: 'plugins/repl/src/model.ts', category: 'contracts' },
-        { pattern: 'plugins/repl/src/adapters/**/*.ts', category: 'adapter' },
-        { pattern: 'plugins/repl/src/ndjson.ts', category: 'utils' },
-        { pattern: 'plugins/repl/workers/*.mjs', category: 'worker' }
+        { pattern: 'plugins/repl-tools/src/model.ts', category: 'contracts' },
+        { pattern: 'plugins/repl-tools/src/adapters/**/*.ts', category: 'adapter' },
+        { pattern: 'plugins/repl-tools/src/ndjson.ts', category: 'utils' },
+        { pattern: 'plugins/repl-tools/workers/*.mjs', category: 'worker' }
       ]
     },
     rules: {

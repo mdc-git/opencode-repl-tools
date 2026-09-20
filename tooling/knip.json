@@ -1,5 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["plugins/repl/workers/node-repl.mjs"],
-  "project": ["plugins/repl/**/*.ts", "plugins/repl/workers/**/*.mjs"]
+  "entry": ["plugins/repl-tools/workers/node-repl.mjs"],
+  "project": ["plugins/repl-tools/**/*.ts", "plugins/repl-tools/workers/**/*.mjs"]
 }

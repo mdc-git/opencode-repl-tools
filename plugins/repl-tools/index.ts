@@ -87,7 +87,7 @@ function invalidationEffect(
 }
 
 const replPlugin = Plugin.define({
-  id: 'github.opencode_repl_tools',
+  id: 'mdc-git.repl-tools',
   effect: (ctx) =>
     Effect.gen(function* () {
       if (process.platform !== 'linux') {

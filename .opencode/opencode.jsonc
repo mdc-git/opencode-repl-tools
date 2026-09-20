@@ -1,4 +1,4 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["-github.opencode_repl_tools", "./"]
+  "plugins": ["-mdc-git.repl-tools", "./"]
 }

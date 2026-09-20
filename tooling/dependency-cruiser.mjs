@@ -19,7 +19,7 @@ const config = {
           '[.]d[.](?:c|m)?ts$',
           '(^|/)tsconfig[.]json$',
           '(^|/)(?:babel|webpack)[.]config[.](?:js|cjs|mjs|ts|cts|mts|json)$',
-          '(^|/)plugins/repl/workers/node-repl[.]mjs$'
+          '(^|/)plugins/repl-tools/workers/node-repl[.]mjs$'
         ]
       },
       to: {}

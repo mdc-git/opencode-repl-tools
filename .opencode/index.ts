@@ -1,6 +1,6 @@
-import plugin from '../plugins/repl/index.ts'
+import plugin from '../plugins/repl-tools/index.ts'
 
 export default {
   ...plugin,
-  id: 'local.opencode_repl_tools'
+  id: 'local.repl-tools'
 }
