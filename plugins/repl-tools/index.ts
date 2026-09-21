@@ -33,7 +33,7 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Default tool for executing Node.js or TypeScript code, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch Node.js or use JavaScript/TypeScript heredocs. Declarations and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
+      'Default tool for executing JavaScript or TypeScript code in Node.js, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch Node.js or use JavaScript/TypeScript heredocs. Declarations and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
