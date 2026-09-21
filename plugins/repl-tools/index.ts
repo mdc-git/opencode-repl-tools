@@ -33,7 +33,7 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Use the persistent Node.js/TypeScript Cell for iterative scripting, prototyping, data work, and experiments; declarations and runtime state persist across calls. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
+      'Default tool for executing Node.js or TypeScript code, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch Node.js or use JavaScript/TypeScript heredocs. Declarations and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
@@ -43,7 +43,7 @@ function addTools(
   editor.add({
     name: 'repl_python',
     description:
-      'Use the persistent Python Cell for iterative scripting, prototyping, data work, and experiments; imports, variables, and runtime state persist across calls.',
+      'Default tool for executing Python code, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch python/python3 or use Python heredocs. Imports, variables, and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
