@@ -16,7 +16,7 @@ function isUtf8ContinuationByte(byte: number | undefined): boolean {
   return byte !== undefined && byte >= 0x80 && byte <= 0xbf
 }
 
-function utf8Tail(text: string, maxBytes: number): string {
+export function utf8Tail(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, 'utf8')
   if (buffer.length <= maxBytes) {
     return text

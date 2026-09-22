@@ -3,7 +3,6 @@ import path from 'node:path'
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const MAX_IMAGES_PER_EVALUATION = 4
-const MAX_TOTAL_IMAGE_BYTES = MAX_IMAGE_BYTES * MAX_IMAGES_PER_EVALUATION
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 
 function imageBytes(value) {
@@ -96,36 +95,21 @@ function validateImageCount(imageCount) {
   }
 }
 
-function nextImageBytes(currentBytes, imageCount, bytes) {
-  validateImageSize(bytes)
-  validateImageCount(imageCount)
-  const nextBytes = currentBytes + bytes.byteLength
-  if (nextBytes > MAX_TOTAL_IMAGE_BYTES) {
-    throw new Error(
-      `opencode.emitImage images exceed the ${MAX_TOTAL_IMAGE_BYTES}-byte evaluation limit`
-    )
-  }
-
-  return nextBytes
-}
-
 export function createImageEmitter(emit) {
   let imageCount = 0
-  let totalImageBytes = 0
 
   function reset() {
     imageCount = 0
-    totalImageBytes = 0
   }
 
   function emitImage(jobId, value) {
     const input = imageInput(value)
     const bytes = imageBytes(input.bytes)
-    const nextBytes = nextImageBytes(totalImageBytes, imageCount, bytes)
+    validateImageSize(bytes)
+    validateImageCount(imageCount)
     const mime = imageMimeType(input.mimeType)
     const name = imageName(input.filename)
     imageCount += 1
-    totalImageBytes = nextBytes
     emit({
       type: 'image',
       jobId,

@@ -12,7 +12,6 @@ import {
   finishJob,
   isSameCell,
   isTerminal,
-  resetError,
   type Cell,
   type Interpreter,
   type Job
@@ -185,10 +184,6 @@ function waitStartingCancel(cell: Cell, job: Job): Effect.Effect<JobOperationOut
   )
 }
 
-function canReturnAfterInterrupt(job: Job, interpreter: Interpreter): boolean {
-  return isTerminal(job.state) && interpreter.alive()
-}
-
 function cancelActive(
   state: RuntimeState,
   cell: Cell,
@@ -197,7 +192,7 @@ function cancelActive(
 ): Effect.Effect<JobOperationOutput> {
   return Effect.gen(function* () {
     yield* Effect.promise(async () => interruptWithGrace(cell, job, interpreter))
-    if (canReturnAfterInterrupt(job, interpreter)) {
+    if (isTerminal(job.state) && interpreter.alive()) {
       return snapshot(cell, job, job.startCursor, true)
     }
 
@@ -226,7 +221,6 @@ export function cancelWork(
 
 type ResetPreparation = {
   readonly interpreter?: Interpreter
-  readonly retry: Cell['cleanupRetry']
   readonly scope: Cell['scope']
   readonly active: Job | undefined
 }
@@ -257,37 +251,27 @@ function prepareReset(map: Map<string, Cell>, cell: Cell): ResetPreparation | un
 
   const { active } = cell
   suppressActive(active)
-  return { interpreter: cell.interpreter, retry: cell.cleanupRetry, scope: cell.scope, active }
-}
-
-function currentCleanup(cell: Cell) {
-  return {
-    interpreter: cell.interpreter,
-    retry: cell.cleanupRetry,
-    lifecycle: cell.lifecycle
-  }
+  return { interpreter: cell.interpreter, scope: cell.scope, active }
 }
 
 function cleanupCell(cell: Cell): Effect.Effect<CleanupResult> {
-  const current = currentCleanup(cell)
-  const { interpreter } = current
+  const { interpreter, cleanupRetry } = cell
   if (interpreter !== undefined) {
     return Effect.promise(async () => safeShutdown(interpreter))
   }
 
-  if (current.lifecycle !== 'failed') {
+  if (cell.lifecycle !== 'failed') {
     return Effect.succeed({ confirmed: true })
   }
 
-  const { retry } = current
-  if (retry === undefined) {
+  if (cleanupRetry === undefined) {
     return Effect.succeed({
       confirmed: false,
       message: cleanupError(cell, 'failed Cell has no viable cleanup handle')
     })
   }
 
-  return Effect.promise(async () => safeRetry(retry))
+  return Effect.promise(async () => safeRetry(cleanupRetry))
 }
 
 function failReset(cell: Cell, cleanup: CleanupResult): string {
@@ -336,7 +320,7 @@ export function resetCell(state: RuntimeState, cell: Cell): Effect.Effect<ResetO
     const cleanup = yield* cleanupCell(cell)
     if (!cleanup.confirmed) {
       const message = yield* state.locked(() => Effect.sync(() => failReset(cell, cleanup)))
-      return resetError('lifecycle', message)
+      return expected('lifecycle', message)
     }
 
     yield* state.locked((map) =>

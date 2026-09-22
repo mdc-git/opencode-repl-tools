@@ -25,30 +25,16 @@ type FoundJob = {
   readonly job: Job
 }
 
-function foregroundRemaining(job: Job): number {
-  return Math.max(0, FOREGROUND_MS - (Date.now() - job.acceptedAt))
-}
-
 function operationResult(output: JobOperationOutput, job?: Job): ReplOperationResult {
-  if (job === undefined || job.images.length === 0) {
-    return { output, images: [] }
-  }
-
-  return { output, images: job.images.splice(0) }
+  return { output, images: job?.images.splice(0) ?? [] }
 }
 
 async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal: AbortSignal) {
-  return new Promise<'wake' | 'timeout'>((resolve) => {
-    let isDone = false
-    const finish = (value: 'wake' | 'timeout') => {
-      if (isDone) {
-        return
-      }
-
-      isDone = true
+  return new Promise<void>((resolve) => {
+    const finish = () => {
       clearTimeout(timer)
       signal.removeEventListener('abort', onAbort)
-      resolve(value)
+      resolve()
     }
 
     const onAbort = () => {
@@ -60,13 +46,9 @@ async function waitForeground(state: RuntimeState, cell: Cell, job: Job, signal:
       state.dispatch(cancelWork(state, cell, job).pipe(Effect.asVoid))
     }
 
-    const timer = setTimeout(() => {
-      finish('timeout')
-    }, foregroundRemaining(job))
+    const timer = setTimeout(finish, Math.max(0, FOREGROUND_MS - (Date.now() - job.acceptedAt)))
     signal.addEventListener('abort', onAbort, { once: true })
-    void job.foreground.promise.then(() => {
-      finish('wake')
-    })
+    void job.foreground.promise.then(finish)
   })
 }
 
@@ -291,7 +273,7 @@ function resetOperation(state: RuntimeState): ReplRuntime['reset'] {
       }
 
       const cell = yield* state.locked((map) =>
-        Effect.sync(() => state.getCell(map, context.sessionID, language))
+        Effect.sync(() => map.get(cellKey(context.sessionID, language)))
       )
       if (cell === undefined) {
         return { ok: true, language }
@@ -323,13 +305,10 @@ export function takeAllCells(map: Map<string, Cell>): Cell[] {
   const values: Cell[] = []
   for (const cell of map.values()) {
     values.push(cell)
-  }
-
-  map.clear()
-  for (const cell of values) {
     cell.notificationsSuppressed = true
   }
 
+  map.clear()
   return values
 }
 
@@ -343,7 +322,7 @@ export function createRuntimeOperations(state: RuntimeState): ReplRuntime {
         const targets = yield* state.locked((map) =>
           Effect.sync(() => takeSessionCells(map, sessionID))
         )
-        yield* invalidateCells(state, targets)
+        yield* invalidateCells(targets)
       })
   }
 }

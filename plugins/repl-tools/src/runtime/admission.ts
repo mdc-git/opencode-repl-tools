@@ -2,7 +2,6 @@ import { Effect } from 'effect'
 import type { JobOperationOutput, Language } from '../model.ts'
 import type { RuntimeState } from './state.ts'
 import {
-  SESSION_ID_KEY,
   cellKey,
   expected,
   isTerminal,
@@ -12,10 +11,6 @@ import {
   type ToolCallContext
 } from './types.ts'
 
-function cleanupError(cell: Cell): string {
-  return cell.cleanupError ?? 'Cell teardown is unconfirmed'
-}
-
 function hasActiveJob(cell: Cell): boolean {
   const { active } = cell
   return active !== undefined && !isTerminal(active.state)
@@ -23,7 +18,7 @@ function hasActiveJob(cell: Cell): boolean {
 
 function lifecycleError(cell: Cell, language: Language): JobOperationOutput | undefined {
   if (cell.lifecycle === 'failed') {
-    return expected('lifecycle', cleanupError(cell))
+    return expected('lifecycle', cell.cleanupError ?? 'Cell teardown is unconfirmed')
   }
 
   if (cell.lifecycle === 'retiring') {
@@ -60,30 +55,8 @@ function prepareJob(cell: Cell, language: Language): Job {
   return job
 }
 
-type CellRequest = {
-  readonly sessionID: ToolCallContext['sessionID']
-  readonly language: Language
-  readonly directory: string
-}
-
 type AdmissionResult =
   { readonly error: JobOperationOutput } | { readonly cell: Cell; readonly job: Job }
-
-function getOrCreateCell(
-  state: RuntimeState,
-  map: Map<string, Cell>,
-  request: CellRequest
-): Effect.Effect<Cell> {
-  const key = cellKey(request.sessionID, request.language)
-  const existing = map.get(key)
-  if (existing !== undefined) {
-    return Effect.succeed(existing)
-  }
-
-  return state
-    .createCell(request.sessionID, request.language, request.directory)
-    .pipe(Effect.tap((cell) => Effect.sync(() => map.set(key, cell))))
-}
 
 export function admitEvaluation(
   state: RuntimeState,
@@ -97,17 +70,15 @@ export function admitEvaluation(
         return { error: expected('lifecycle', 'plugin activation is closed') }
       }
 
-      const existing = map.get(cellKey(context.sessionID, language))
+      const key = cellKey(context.sessionID, language)
+      const existing = map.get(key)
       const denied = admissionError(existing, language)
       if (denied !== undefined) {
         return { error: denied }
       }
 
-      const cell = yield* getOrCreateCell(state, map, {
-        [SESSION_ID_KEY]: context.sessionID,
-        language,
-        directory
-      })
+      const cell = existing ?? (yield* state.createCell(context.sessionID, language, directory))
+      map.set(key, cell)
       return { cell, job: prepareJob(cell, language) }
     })
   )

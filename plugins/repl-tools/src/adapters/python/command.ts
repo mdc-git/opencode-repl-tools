@@ -26,18 +26,8 @@ function utf8Tail(text: string, maxBytes: number): string {
   return buffer.subarray(start).toString('utf8')
 }
 
-function appendTail(current: string, chunk: string): string {
-  return utf8Tail(current + chunk, DIAGNOSTIC_BYTES)
-}
-
 function chunkText(chunk: unknown): string {
   return Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
-}
-
-function bindData(stream: Readable | undefined, handler: (chunk: unknown) => void): void {
-  if (stream !== undefined) {
-    stream.on('data', handler)
-  }
 }
 
 class CommandCapture {
@@ -47,13 +37,16 @@ class CommandCapture {
   private aborting = false
 
   constructor(
-    private readonly child: ChildProcess,
+    private readonly child: ChildProcess & {
+      stdout: Readable
+      stderr: Readable
+    },
     private readonly signal: AbortSignal
   ) {
-    bindData(child.stdout ?? undefined, (chunk) => {
+    child.stdout.on('data', (chunk) => {
       this.onStdout(chunk)
     })
-    bindData(child.stderr ?? undefined, (chunk) => {
+    child.stderr.on('data', (chunk) => {
       this.onStderr(chunk)
     })
   }
@@ -61,11 +54,11 @@ class CommandCapture {
   private onStdout(chunk: unknown): void {
     const text = chunkText(chunk)
     this.stdout += text
-    this.tail = appendTail(this.tail, text)
+    this.tail = utf8Tail(this.tail + text, DIAGNOSTIC_BYTES)
   }
 
   private onStderr(chunk: unknown): void {
-    this.tail = appendTail(this.tail, chunkText(chunk))
+    this.tail = utf8Tail(this.tail + chunkText(chunk), DIAGNOSTIC_BYTES)
   }
 
   private abort(reject: (reason: Error) => void): void {

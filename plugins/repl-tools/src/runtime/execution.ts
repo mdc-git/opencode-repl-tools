@@ -109,12 +109,15 @@ async function startInterpreter(
 }
 
 function recordStartupFailure(cell: Cell, job: Job, failure: StartupFailure): void {
-  const cleanup = startupCleanup(failure.error)
-  if (cleanup.unconfirmed) {
+  const retry = startupCleanup(failure.error)
+  if (retry !== undefined) {
     cell.lifecycle = 'failed'
     cell.cleanupError = `startup teardown could not be confirmed: ${errorMessage(failure.error)}`
-    cell.cleanupRetry = cleanup.retry
-    finishJob(cell, job, 'failed', { kind: 'lifecycle', message: cell.cleanupError })
+    cell.cleanupRetry = retry
+    finishJob(cell, job, 'failed', {
+      kind: 'lifecycle',
+      message: cell.cleanupError
+    })
     return
   }
 
@@ -124,7 +127,10 @@ function recordStartupFailure(cell: Cell, job: Job, failure: StartupFailure): vo
   }
 
   cell.lifecycle = 'healthy'
-  finishJob(cell, job, 'failed', { kind: 'startup', message: errorMessage(failure.error) })
+  finishJob(cell, job, 'failed', {
+    kind: 'startup',
+    message: errorMessage(failure.error)
+  })
 }
 
 function isInterpreterBlocked(cell: Cell): boolean {
@@ -241,18 +247,13 @@ function interpreterForJob(
 
 async function evaluateInterpreter(interpreter: Interpreter, job: Job, code: string) {
   try {
-    return { ok: true as const, result: await interpreter.evaluate(job.id, code) }
+    return {
+      ok: true as const,
+      result: await interpreter.evaluate(job.id, code)
+    }
   } catch (error) {
     return { ok: false as const, error }
   }
-}
-
-function interpreterFailureMessage(error: { readonly message: string } | undefined): string {
-  if (error !== undefined) {
-    return error.message
-  }
-
-  return 'interpreter evaluation failed'
 }
 
 function evaluationOutcome(result: Awaited<ReturnType<typeof evaluateInterpreter>>) {
@@ -267,8 +268,13 @@ function evaluationOutcome(result: Awaited<ReturnType<typeof evaluateInterpreter
     return { state: 'succeeded' as const, error: undefined }
   }
 
-  const message = interpreterFailureMessage(result.result.error)
-  return { state: 'failed' as const, error: { kind: 'runtime' as const, message } }
+  const { message } = result.result.error ?? {
+    message: 'interpreter evaluation failed'
+  }
+  return {
+    state: 'failed' as const,
+    error: { kind: 'runtime' as const, message }
+  }
 }
 
 function completeEvaluation(

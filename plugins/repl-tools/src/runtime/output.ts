@@ -1,28 +1,7 @@
 import { Buffer } from 'node:buffer'
 import type { JobStatus, OutputChunk } from '../model.ts'
+import { utf8Tail } from '../output-ring.ts'
 import { PREVIEW_BYTES, type Cell, type Job } from './types.ts'
-
-function isUtf8ContinuationByte(byte: number | undefined): boolean {
-  return byte !== undefined && byte >= 0x80 && byte <= 0xbf
-}
-
-export function utf8Tail(text: string, maxBytes: number): string {
-  const buffer = Buffer.from(text, 'utf8')
-  if (buffer.length <= maxBytes) {
-    return text
-  }
-
-  let start = buffer.length - maxBytes
-  while (isUtf8ContinuationByte(buffer[start])) {
-    start += 1
-  }
-
-  return buffer.subarray(start).toString('utf8')
-}
-
-function takeChunkTail(chunk: OutputChunk, remaining: number): OutputChunk {
-  return { ...chunk, text: utf8Tail(chunk.text, remaining) }
-}
 
 function appendPreviewChunk(
   reversed: OutputChunk[],
@@ -30,7 +9,7 @@ function appendPreviewChunk(
   remaining: number
 ): number {
   const bytes = Buffer.byteLength(chunk.text, 'utf8')
-  reversed.push(bytes <= remaining ? chunk : takeChunkTail(chunk, remaining))
+  reversed.push(bytes <= remaining ? chunk : { ...chunk, text: utf8Tail(chunk.text, remaining) })
   return Math.max(0, remaining - bytes)
 }
 
@@ -73,10 +52,6 @@ function inputDetails(job: Job): Pick<JobStatus, 'prompt' | 'password'> {
   }
 }
 
-function selectedCursor(job: Job, cursor: number | undefined): number {
-  return cursor ?? job.startCursor
-}
-
 function selectedChunks(chunks: readonly OutputChunk[], isPreview: boolean | undefined) {
   if (isPreview === true) {
     return previewChunks(chunks, PREVIEW_BYTES)
@@ -90,7 +65,7 @@ function withError(error: JobStatus['error']): Pick<JobStatus, 'error'> {
 }
 
 export function snapshot(cell: Cell, job: Job, cursor?: number, isPreview?: boolean): JobStatus {
-  const read = cell.transcript.read(selectedCursor(job, cursor))
+  const read = cell.transcript.read(cursor ?? job.startCursor)
   const limited = selectedChunks(read.chunks, isPreview)
   return {
     ok: true,

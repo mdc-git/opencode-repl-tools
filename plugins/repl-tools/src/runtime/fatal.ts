@@ -82,10 +82,6 @@ function finishFatal(cell: Cell, interpreter: Interpreter, message: string): Job
   return finished
 }
 
-function fatalCleanupMessage(message: string | undefined): string {
-  return message ?? 'interpreter teardown could not be confirmed'
-}
-
 function finalizeFatal(
   state: RuntimeState,
   cell: Cell,
@@ -101,7 +97,7 @@ function finalizeFatal(
       )
       yield* state.replaceCellScope(cell, prepared.scope)
     } else {
-      const detail = fatalCleanupMessage(cleanup.message)
+      const detail = cleanup.message ?? 'interpreter teardown could not be confirmed'
       finished = yield* state.locked(() =>
         Effect.sync(() => failFatalCleanup(cell, prepared.interpreter, detail))
       )

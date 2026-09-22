@@ -8,7 +8,7 @@ import { errorMessage } from '../protocol.ts'
 import { decodeNodeEvent, type NodeWorkerEvent } from './protocol.ts'
 import type { NodeEvalResult, NodeEvent, NodeInterpreter } from './types.ts'
 
-const RETIRE_OPTIONS = {
+export const NODE_RETIRE_OPTIONS = {
   orderlyWaitMs: 350,
   termWaitMs: 500,
   killWaitMs: 750,
@@ -56,24 +56,14 @@ function chunkText(chunk: unknown): string {
   return Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
 }
 
-async function retirement(child: ChildProcess, orderly?: () => void): Promise<CleanupResult> {
-  return retireProcessGroup(child, { ...RETIRE_OPTIONS, orderly })
-}
-
 class NodeConnection implements NodeInterpreter {
   private readonly decoder = new NdjsonDecoder<NodeWorkerEvent>(decodeNodeEvent)
   private pending: PendingEval | undefined
-  private activeJobId: string | undefined
   private closed = false
   private fatalSeen = false
   private shutdownRequested = false
   private shutdownPromise: Promise<CleanupResult> | undefined
-  private readyResolve!: (version: string) => void
-  private readyReject!: (error: Error) => void
-  private readonly ready = new Promise<string>((resolve, reject) => {
-    this.readyResolve = resolve
-    this.readyReject = reject
-  })
+  private readonly ready = Promise.withResolvers<string>()
 
   readonly language = 'node' as const
 
@@ -135,7 +125,7 @@ class NodeConnection implements NodeInterpreter {
     event: Exclude<NodeWorkerEvent, { type: 'output' | 'image' | 'done' }>
   ): void {
     if (event.type === 'ready') {
-      this.readyResolve(event.nodeVersion)
+      this.ready.resolve(event.nodeVersion)
       return
     }
 
@@ -152,14 +142,15 @@ class NodeConnection implements NodeInterpreter {
 
     const current = this.pending
     this.pending = undefined
-    this.activeJobId = undefined
-    current.resolve({ ok: event.ok, ...(event.error !== undefined && { error: event.error }) })
+    current.resolve({
+      ok: event.ok,
+      ...(event.error !== undefined && { error: event.error })
+    })
   }
 
   private failPending(error: Error): void {
     const current = this.pending
     this.pending = undefined
-    this.activeJobId = undefined
     current?.reject(error)
   }
 
@@ -171,7 +162,7 @@ class NodeConnection implements NodeInterpreter {
     this.fatalSeen = true
     const error = new Error(message)
     this.failPending(error)
-    this.readyReject(error)
+    this.ready.reject(error)
   }
 
   private onExit(code: number | undefined, signal: NodeJS.Signals | undefined): void {
@@ -190,22 +181,12 @@ class NodeConnection implements NodeInterpreter {
     }
 
     this.shutdownRequested = true
-    this.readyReject(new Error('Node REPL startup was cancelled'))
-    void retirement(this.options.child)
-  }
-
-  private isPending(jobId: string): boolean {
-    const { pending } = this
-    return pending?.jobId === jobId
-  }
-
-  private clearPending(): void {
-    this.pending = undefined
-    this.activeJobId = undefined
+    this.ready.reject(new Error('Node REPL startup was cancelled'))
+    void retireProcessGroup(this.options.child, NODE_RETIRE_OPTIONS)
   }
 
   private assertActive(jobId: string): void {
-    if (this.closed || this.activeJobId !== jobId) {
+    if (this.closed || this.pending?.jobId !== jobId) {
       throw new Error(`job ${jobId} is not the active Node evaluation`)
     }
   }
@@ -249,7 +230,7 @@ class NodeConnection implements NodeInterpreter {
 
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
-      const version = await this.ready
+      const version = await this.ready.promise
       const major = nodeMajor(version)
       if (major === undefined || major < 26) {
         throw new Error(`Node REPL requires Node >= 26; configured executable reported ${version}`)
@@ -270,10 +251,9 @@ class NodeConnection implements NodeInterpreter {
 
     return new Promise((resolve, reject) => {
       this.pending = { jobId, resolve, reject }
-      this.activeJobId = jobId
       void this.sendControl({ type: 'eval', jobId, code }).catch((error: unknown) => {
-        if (this.isPending(jobId)) {
-          this.clearPending()
+        if (this.pending?.jobId === jobId) {
+          this.pending = undefined
         }
 
         reject(error instanceof Error ? error : new Error(errorMessage(error)))
@@ -310,8 +290,11 @@ class NodeConnection implements NodeInterpreter {
     }
 
     this.shutdownRequested = true
-    const current = retirement(this.options.child, () => {
-      this.requestShutdown()
+    const current = retireProcessGroup(this.options.child, {
+      ...NODE_RETIRE_OPTIONS,
+      orderly: () => {
+        this.requestShutdown()
+      }
     })
     this.shutdownPromise = current.then((result) => this.finishShutdown(result))
     return this.shutdownPromise

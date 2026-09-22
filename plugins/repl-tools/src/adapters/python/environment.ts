@@ -30,18 +30,13 @@ type EnvironmentPaths = {
   readonly python: string
 }
 
-function versionPart(version: string, name: 'major' | 'minor'): string | undefined {
-  return VERSION_PATTERN.exec(version.trim())?.groups?.[name]
-}
-
 function parseVersion(version: string): PythonVersion | undefined {
-  const major = versionPart(version, 'major')
-  const minor = versionPart(version, 'minor')
-  if (major === undefined || minor === undefined) {
+  const parts = VERSION_PATTERN.exec(version.trim())?.groups
+  if (parts === undefined) {
     return undefined
   }
 
-  return { major: Number(major), minor: Number(minor) }
+  return { major: Number(parts.major), minor: Number(parts.minor) }
 }
 
 function isSupportedVersion(version: PythonVersion | undefined): version is PythonVersion {
@@ -79,30 +74,13 @@ async function doesFileExist(filename: string): Promise<boolean> {
   }
 }
 
-async function verifyEnvironment(python: string, signal: AbortSignal): Promise<void> {
-  await captureCommand(python, VERIFY_COMMAND, signal)
-}
-
 export class PythonEnvironment {
   private readonly bootstrapAbort = new AbortController()
   private bootstrapPromise: Promise<string> | undefined
-  private readyPython: string | undefined
 
   constructor(private readonly configuredPython: string) {}
 
-  private remember(python: string): string {
-    this.readyPython = python
-    return python
-  }
-
-  private clearFailure(error: unknown): never {
-    this.bootstrapPromise = undefined
-    throw error
-  }
-
-  private async configuredVersion(
-    signal: AbortSignal
-  ): Promise<{ version: PythonVersion; tail: string }> {
+  private async configuredVersion(signal: AbortSignal): Promise<PythonVersion> {
     const result = await captureCommand(this.configuredPython, VERSION_COMMAND, signal)
     const version = parseVersion(result.stdout)
     if (!isSupportedVersion(version)) {
@@ -114,11 +92,11 @@ export class PythonEnvironment {
       )
     }
 
-    return { version, tail: result.tail }
+    return version
   }
 
   private async build(signal: AbortSignal): Promise<string> {
-    const { version } = await this.configuredVersion(signal)
+    const version = await this.configuredVersion(signal)
     const requirements = await fs.readFile(requirementsPath)
     const sha = crypto.createHash('sha256').update(requirements).digest('hex')
     const paths = pathsFor(version, sha)
@@ -132,7 +110,7 @@ export class PythonEnvironment {
 
   private async useCached(paths: EnvironmentPaths, signal: AbortSignal): Promise<string> {
     try {
-      await verifyEnvironment(paths.python, signal)
+      await captureCommand(paths.python, VERIFY_COMMAND, signal)
       return paths.python
     } catch (error) {
       const tail = error instanceof PythonStartupError ? error.diagnosticTail : undefined
@@ -148,7 +126,7 @@ export class PythonEnvironment {
     try {
       await fs.rm(paths.venv, { recursive: true, force: true })
       await this.populate(paths.venv, signal)
-      await verifyEnvironment(paths.python, signal)
+      await captureCommand(paths.python, VERIFY_COMMAND, signal)
       isReady = true
       return paths.python
     } catch (error) {
@@ -184,17 +162,14 @@ export class PythonEnvironment {
   }
 
   async ensure(): Promise<string> {
-    if (this.readyPython !== undefined) {
-      return this.readyPython
-    }
-
     if (this.bootstrapPromise !== undefined) {
       return this.bootstrapPromise
     }
 
-    this.bootstrapPromise = this.build(this.bootstrapAbort.signal)
-      .then((python) => this.remember(python))
-      .catch((error: unknown) => this.clearFailure(error))
+    this.bootstrapPromise = this.build(this.bootstrapAbort.signal).catch((error: unknown) => {
+      this.bootstrapPromise = undefined
+      throw error
+    })
     return this.bootstrapPromise
   }
 

@@ -6,8 +6,8 @@ import { OutputRing } from '../output-ring.ts'
 import {
   SESSION_ID_KEY,
   TRANSCRIPT_BYTES,
-  cellKey,
   errorMessage,
+  expected,
   isSameCell,
   type Cell,
   type SessionId
@@ -21,12 +21,15 @@ type RuntimeStateOptions = {
   readonly cells: SynchronizedRef.SynchronizedRef<Map<string, Cell>>
 }
 
-function hasWorkspaceMismatch(expected: string | undefined, actual: string | undefined): boolean {
-  if (expected === undefined || actual === undefined) {
+function hasWorkspaceMismatch(
+  expectedWorkspace: string | undefined,
+  actual: string | undefined
+): boolean {
+  if (expectedWorkspace === undefined || actual === undefined) {
     return false
   }
 
-  return expected !== actual
+  return expectedWorkspace !== actual
 }
 
 function lifecycleForInterpreter(cell: Cell): 'healthy' | 'live' {
@@ -48,39 +51,21 @@ export class RuntimeState {
     this.python = new PythonAdapter(options.pythonCommand)
   }
 
-  private closedValidation() {
-    return {
-      ok: false as const,
-      error: { kind: 'lifecycle' as const, message: 'plugin activation is closed' }
-    }
-  }
-
-  private lookupFailure(error: unknown) {
-    return {
-      ok: false as const,
-      error: {
-        kind: 'lifecycle' as const,
-        message: `OpenCode session lookup failed: ${errorMessage(error)}`
-      }
-    }
-  }
-
   private validateLocation(session: {
-    readonly location: { readonly directory: string; readonly workspaceID?: string }
+    readonly location: {
+      readonly directory: string
+      readonly workspaceID?: string
+    }
   }) {
     if (session.location.directory !== this.ctx.location.directory) {
-      return this.locationFailure('session moved away from this plugin location')
+      return expected('lifecycle', 'session moved away from this plugin location')
     }
 
     if (hasWorkspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID)) {
-      return this.locationFailure('session workspace no longer matches this plugin location')
+      return expected('lifecycle', 'session workspace no longer matches this plugin location')
     }
 
     return { ok: true as const, session }
-  }
-
-  private locationFailure(message: string) {
-    return { ok: false as const, error: { kind: 'lifecycle' as const, message } }
   }
 
   private installReplacement(
@@ -124,12 +109,16 @@ export class RuntimeState {
 
   validateSession(sessionID: SessionId) {
     if (!this.activationOpen()) {
-      return Effect.succeed(this.closedValidation())
+      return Effect.succeed(expected('lifecycle', 'plugin activation is closed'))
     }
 
     return this.ctx.session.get({ [SESSION_ID_KEY]: sessionID }).pipe(
       Effect.map((session) => this.validateLocation(session)),
-      Effect.catch((error) => Effect.succeed(this.lookupFailure(error)))
+      Effect.catch((error) =>
+        Effect.succeed(
+          expected('lifecycle', `OpenCode session lookup failed: ${errorMessage(error)}`)
+        )
+      )
     )
   }
 
@@ -169,10 +158,6 @@ export class RuntimeState {
       )
     )
   }
-
-  getCell(map: Map<string, Cell>, sessionID: SessionId, language: Language): Cell | undefined {
-    return map.get(cellKey(sessionID, language))
-  }
 }
 
 export function makeState(
@@ -184,6 +169,12 @@ export function makeState(
     const parentScope = yield* Scope.Scope
     const activationScope = yield* Scope.fork(parentScope)
     const cells = yield* SynchronizedRef.make(new Map<string, Cell>())
-    return new RuntimeState({ ctx, nodeCommand, pythonCommand, activationScope, cells })
+    return new RuntimeState({
+      ctx,
+      nodeCommand,
+      pythonCommand,
+      activationScope,
+      cells
+    })
   })
 }

@@ -10,7 +10,7 @@ export type { ReplRuntime } from './runtime/types.ts'
 function closeRuntime(state: RuntimeState): Effect.Effect<void> {
   return Effect.gen(function* () {
     const targets = yield* state.locked((map) => Effect.sync(() => takeAllCells(map)))
-    yield* invalidateCells(state, targets)
+    yield* invalidateCells(targets)
     yield* Effect.promise(async () => state.python.close())
   })
 }

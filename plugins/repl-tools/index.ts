@@ -1,6 +1,6 @@
 import process from 'node:process'
 import { Plugin } from '@opencode/plugin/effect'
-import { Effect, Stream } from 'effect'
+import { Effect, Match, Stream } from 'effect'
 import {
   evalInputSchema,
   jobInputSchema,
@@ -9,9 +9,7 @@ import {
   resetOutputSchema
 } from './src/model.ts'
 import { makeRuntime, type ReplRuntime } from './src/runtime.ts'
-import type { ReplOperationResult, SessionId } from './src/runtime/types.ts'
-
-const invalidatingEvents = new Set(['session.moved', 'session.deleted', 'session.revert.staged'])
+import type { ReplOperationResult } from './src/runtime/types.ts'
 
 function toolResult(result: ReplOperationResult) {
   const content = result.images.map((image) => ({
@@ -71,21 +69,6 @@ function addTools(
   })
 }
 
-function invalidationEffect(
-  runtime: ReplRuntime,
-  event: { readonly type: string; readonly sessionID?: string }
-) {
-  if (!invalidatingEvents.has(event.type)) {
-    return Effect.void
-  }
-
-  if (event.sessionID === undefined) {
-    return Effect.void
-  }
-
-  return runtime.invalidateSession(event.sessionID as SessionId)
-}
-
 const replPlugin = Plugin.define({
   id: 'mdc-git.repl-tools',
   effect: (ctx) =>
@@ -101,7 +84,17 @@ const replPlugin = Plugin.define({
         addTools(editor, runtime)
       })
       yield* ctx.event.subscribe().pipe(
-        Stream.runForEach((event) => invalidationEffect(runtime, event)),
+        Stream.runForEach((event) =>
+          Match.value(event).pipe(
+            Match.discriminator('type')(
+              'session.moved',
+              'session.deleted',
+              'session.revert.staged',
+              ({ data }) => runtime.invalidateSession(data.sessionID)
+            ),
+            Match.orElse(() => Effect.void)
+          )
+        ),
         Effect.forkScoped
       )
     })

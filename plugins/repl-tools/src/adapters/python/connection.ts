@@ -32,29 +32,14 @@ function chunkText(chunk: unknown): string {
   return Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
 }
 
-async function retirement(
-  child: ChildProcessWithoutNullStreams,
-  orderly?: () => void
-): Promise<CleanupResult> {
-  return retireProcessGroup(child, { ...RETIRE_OPTIONS, orderly })
-}
-
 export class PythonConnection implements PythonInterpreter {
   private readonly decoder = new NdjsonDecoder<PythonBrokerEvent>(decodePythonEvent)
   private pending: PendingEval | undefined
-  private activeJobId: string | undefined
   private closed = false
   private fatalSeen = false
   private shutdownRequested = false
-  private shutdownAcknowledged = false
-  private shutdownConfirmed = false
   private shutdownPromise: Promise<CleanupResult> | undefined
-  private readyResolve!: (version: string) => void
-  private readyReject!: (error: Error) => void
-  private readonly ready = new Promise<string>((resolve, reject) => {
-    this.readyResolve = resolve
-    this.readyReject = reject
-  })
+  private readonly ready = Promise.withResolvers<string>()
 
   readonly language = 'python' as const
 
@@ -84,18 +69,13 @@ export class PythonConnection implements PythonInterpreter {
   }
 
   private onBrokerEvent(event: PythonBrokerEvent): void {
-    if (event.type === 'output') {
+    if (event.type === 'output' || event.type === 'waiting_input') {
       this.options.onEvent(event)
       return
     }
 
     if (event.type === 'done') {
       this.finishPending(event)
-      return
-    }
-
-    if (event.type === 'waiting_input') {
-      this.options.onEvent(event)
       return
     }
 
@@ -106,17 +86,13 @@ export class PythonConnection implements PythonInterpreter {
     event: Exclude<PythonBrokerEvent, { type: 'output' | 'done' | 'waiting_input' }>
   ): void {
     if (event.type === 'ready') {
-      this.readyResolve(event.pythonVersion)
+      this.ready.resolve(event.pythonVersion)
       return
     }
 
     if (event.type === 'fatal') {
       this.fatal(event.message)
-      return
     }
-
-    this.shutdownAcknowledged = true
-    this.shutdownConfirmed = event.confirmed
   }
 
   private emitOutput(stream: OutputStream, chunk: unknown): void {
@@ -131,14 +107,15 @@ export class PythonConnection implements PythonInterpreter {
 
     const current = this.pending
     this.pending = undefined
-    this.activeJobId = undefined
-    current.resolve({ ok: event.ok, ...(event.error !== undefined && { error: event.error }) })
+    current.resolve({
+      ok: event.ok,
+      ...(event.error !== undefined && { error: event.error })
+    })
   }
 
   private failPending(error: Error): void {
     const current = this.pending
     this.pending = undefined
-    this.activeJobId = undefined
     current?.reject(error)
   }
 
@@ -150,7 +127,7 @@ export class PythonConnection implements PythonInterpreter {
     this.fatalSeen = true
     const error = new Error(message)
     this.failPending(error)
-    this.readyReject(error)
+    this.ready.reject(error)
   }
 
   private onExit(code: number | undefined, signal: NodeJS.Signals | undefined): void {
@@ -165,22 +142,12 @@ export class PythonConnection implements PythonInterpreter {
 
   private cancelStartup(): void {
     this.shutdownRequested = true
-    this.readyReject(new Error('Python REPL startup was cancelled'))
-    void retirement(this.options.child)
-  }
-
-  private isPending(jobId: string): boolean {
-    const { pending } = this
-    return pending?.jobId === jobId
-  }
-
-  private clearPending(): void {
-    this.pending = undefined
-    this.activeJobId = undefined
+    this.ready.reject(new Error('Python REPL startup was cancelled'))
+    void retireProcessGroup(this.options.child, RETIRE_OPTIONS)
   }
 
   private assertActive(jobId: string): void {
-    if (this.closed || this.activeJobId !== jobId) {
+    if (this.closed || this.pending?.jobId !== jobId) {
       throw new Error(`job ${jobId} is not the active Python evaluation`)
     }
   }
@@ -189,30 +156,6 @@ export class PythonConnection implements PythonInterpreter {
     if (!this.closed) {
       this.options.child.stdin.write(encodeNdjson({ type: 'shutdown' }))
     }
-  }
-
-  private kernelAckFailureMessage(result: CleanupResult): string {
-    if (result.message !== undefined) {
-      return result.message
-    }
-
-    return 'broker acknowledged kernel shutdown but process-group exit was not confirmed'
-  }
-
-  private accountForKernelAck(result: CleanupResult): CleanupResult {
-    if (result.confirmed) {
-      return result
-    }
-
-    if (!this.shutdownAcknowledged) {
-      return result
-    }
-
-    if (!this.shutdownConfirmed) {
-      return result
-    }
-
-    return { confirmed: false, message: this.kernelAckFailureMessage(result) }
   }
 
   private finishShutdown(result: CleanupResult): CleanupResult {
@@ -248,7 +191,7 @@ export class PythonConnection implements PythonInterpreter {
 
     signal.addEventListener('abort', abortStartup, { once: true })
     try {
-      return await this.ready
+      return await this.ready.promise
     } finally {
       signal.removeEventListener('abort', abortStartup)
     }
@@ -265,10 +208,9 @@ export class PythonConnection implements PythonInterpreter {
 
     return new Promise((resolve, reject) => {
       this.pending = { jobId, resolve, reject }
-      this.activeJobId = jobId
       void this.send({ type: 'execute', jobId, code }).catch((error: unknown) => {
-        if (this.isPending(jobId)) {
-          this.clearPending()
+        if (this.pending?.jobId === jobId) {
+          this.pending = undefined
         }
 
         reject(error instanceof Error ? error : new Error(errorMessage(error)))
@@ -292,9 +234,12 @@ export class PythonConnection implements PythonInterpreter {
     }
 
     this.shutdownRequested = true
-    const current = retirement(this.options.child, () => {
-      this.requestShutdown()
-    }).then((result) => this.accountForKernelAck(result))
+    const current = retireProcessGroup(this.options.child, {
+      ...RETIRE_OPTIONS,
+      orderly: () => {
+        this.requestShutdown()
+      }
+    })
     this.shutdownPromise = current.then((result) => this.finishShutdown(result))
     return this.shutdownPromise
   }
@@ -316,11 +261,6 @@ export function spawnPythonConnection(options: {
     detached: true,
     stdio: ['pipe', 'pipe', 'pipe']
   })
-  if (child.stdin === null || child.stdout === null || child.stderr === null) {
-    void retireProcessGroup(child, RETIRE_OPTIONS)
-    throw new Error('Python broker standard pipes are unavailable')
-  }
-
   return new PythonConnection({
     child,
     onEvent: options.onEvent

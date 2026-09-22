@@ -1,5 +1,5 @@
 import { Effect } from 'effect'
-import { utf8Tail } from './output.ts'
+import { utf8Tail } from '../output-ring.ts'
 import type { RuntimeState } from './state.ts'
 import {
   PREVIEW_BYTES,

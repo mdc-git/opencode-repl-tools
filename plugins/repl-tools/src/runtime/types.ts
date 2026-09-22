@@ -28,18 +28,13 @@ export type Interpreter = NodeInterpreter | PythonInterpreter
 export type CleanupRetry = () => Promise<CleanupResult>
 type CellLifecycle = 'healthy' | 'starting' | 'live' | 'retiring' | 'failed'
 
-type SignalPair = {
-  readonly promise: Promise<void>
-  readonly resolve: () => void
-}
-
 export type Job = {
   readonly id: string
   readonly language: Language
   readonly startCursor: number
   readonly acceptedAt: number
-  readonly foreground: SignalPair
-  readonly completion: SignalPair
+  readonly foreground: PromiseWithResolvers<void>
+  readonly completion: PromiseWithResolvers<void>
   readonly images: NodeImage[]
   state: JobState
   error?: ReplError
@@ -85,33 +80,16 @@ export type ReplRuntime = {
   readonly invalidateSession: (sessionID: SessionId) => Effect.Effect<void>
 }
 
-function signalPair(): SignalPair {
-  let isSettled = false
-  const { promise, resolve: resolvePromise } = Promise.withResolvers<void>()
-  return {
-    promise,
-    resolve() {
-      if (isSettled) {
-        return
-      }
-
-      isSettled = true
-      resolvePromise()
-    }
-  }
-}
-
 const TERMINAL_STATES = new Set<JobState>(['succeeded', 'failed', 'cancelled'])
 
 export function isTerminal(state: JobState): boolean {
   return TERMINAL_STATES.has(state)
 }
 
-export function expected(kind: ErrorKind, message: string): JobOperationOutput {
-  return { ok: false, error: { kind, message } }
-}
-
-export function resetError(kind: ErrorKind, message: string): ResetOutput {
+export function expected(
+  kind: ErrorKind,
+  message: string
+): Extract<JobOperationOutput, { ok: false }> {
   return { ok: false, error: { kind, message } }
 }
 
@@ -132,11 +110,7 @@ export function isSameCell(map: Map<string, Cell>, cell: Cell): boolean {
   return map.get(cellKey(cell.sessionID, cell.language)) === cell
 }
 
-export function findJob(cell: Cell | undefined, id: string): Job | undefined {
-  if (cell === undefined) {
-    return undefined
-  }
-
+export function findJob(cell: Cell, id: string): Job | undefined {
   const { active } = cell
   if (active?.id === id) {
     return active
@@ -191,8 +165,8 @@ export function newJob(cell: Cell, language: Language): Job {
     language,
     startCursor: cell.transcript.cursor,
     acceptedAt: Date.now(),
-    foreground: signalPair(),
-    completion: signalPair(),
+    foreground: Promise.withResolvers<void>(),
+    completion: Promise.withResolvers<void>(),
     images: [],
     state: 'starting',
     inputSerial: 0,
@@ -204,22 +178,10 @@ export function newJob(cell: Cell, language: Language): Job {
   }
 }
 
-function cleanupRetry(error: unknown): CleanupRetry | undefined {
-  if (error instanceof NodeStartupError) {
-    return error.retryCleanup
-  }
-
-  if (error instanceof PythonStartupError) {
+export function startupCleanup(error: unknown): CleanupRetry | undefined {
+  if (error instanceof NodeStartupError || error instanceof PythonStartupError) {
     return error.retryCleanup
   }
 
   return undefined
-}
-
-export function startupCleanup(error: unknown): {
-  readonly unconfirmed: boolean
-  readonly retry?: CleanupRetry
-} {
-  const retry = cleanupRetry(error)
-  return retry === undefined ? { unconfirmed: false } : { unconfirmed: true, retry }
 }
