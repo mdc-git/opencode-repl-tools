@@ -25,14 +25,15 @@ imports, and other state survive between tool calls.
 
 ## Install
 
-Add the plugin to your OpenCode configuration. This pins the GitHub source to
-tag `0.0.1`:
+Choose the latest release from the repository's **Releases** section in the
+right sidebar on GitHub. Replace `<release-tag>` below with that release's tag;
+for example, `0.0.1` can be a release tag.
 
 ```jsonc
 {
   "plugins": [
     {
-      "package": "opencode-repl-tools@git+https://github.com/mdc-git/opencode-repl-tools.git#0.0.1"
+      "package": "opencode-repl-tools@git+https://github.com/mdc-git/opencode-repl-tools.git#<release-tag>"
     }
   ]
 }
