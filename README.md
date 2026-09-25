@@ -25,13 +25,14 @@ imports, and other state survive between tool calls.
 
 ## Install
 
-Add the plugin to your OpenCode configuration:
+Add the plugin to your OpenCode configuration. This pins the GitHub source to
+tag `0.0.1`:
 
 ```jsonc
 {
   "plugins": [
     {
-      "package": "opencode-repl-tools@git+https://github.com/mdc-git/opencode-repl-tools.git"
+      "package": "opencode-repl-tools@git+https://github.com/mdc-git/opencode-repl-tools.git#0.0.1"
     }
   ]
 }
