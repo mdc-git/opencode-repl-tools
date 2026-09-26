@@ -31,7 +31,7 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Default tool for executing TypeScript/JavaScript or Node.js code, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch Node.js or use JavaScript/TypeScript heredocs. Declarations and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required. Emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
+      'Execute TypeScript, JavaScript, or Node.js code in a persistent REPL. Use for snippets, calculations, parsing, data work, experiments, and iterative scripting when retained variables, imports, or runtime state are useful. Prefer shell only when shell semantics, a separate process, a specific CLI, or an existing script file is required. Node code can emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
@@ -41,7 +41,7 @@ function addTools(
   editor.add({
     name: 'repl_python',
     description:
-      'Default tool for executing Python code, including one-off snippets, calculations, parsing, data work, experiments, and iterative scripting. Prefer this over shell commands that launch python/python3 or use Python heredocs. Imports, variables, and runtime state persist across calls. Use shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required.',
+      'Execute Python code in a persistent REPL. Use for snippets, calculations, parsing, data work, experiments, and iterative scripting when retained imports, variables, or runtime state are useful. Prefer shell only when shell semantics, a separate process, a specific CLI, or an existing script file is required.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
@@ -51,7 +51,7 @@ function addTools(
   editor.add({
     name: 'repl_job',
     description:
-      'Continue a persistent REPL job: read incremental output/status, cancel it, or provide stdin when Python is waiting for input.',
+      'Manage an existing background REPL job. Use to read incremental output or status, cancel the job, or send stdin when the job is waiting for input.',
     input: jobInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
@@ -60,7 +60,7 @@ function addTools(
   editor.add({
     name: 'repl_reset',
     description:
-      'Reset a persistent REPL Cell only when you need a clean interpreter; normal scripting and prototyping should reuse the existing Cell.',
+      'Reset the persistent Node or Python REPL and clear its retained state. Use only when a clean interpreter is required; otherwise keep using the existing REPL.',
     input: resetInputSchema,
     output: resetOutputSchema,
     options: { codemode: false },
