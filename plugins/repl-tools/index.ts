@@ -31,7 +31,7 @@ function addTools(
   editor.add({
     name: 'repl_node',
     description:
-      'Execute TypeScript, JavaScript, or Node.js code in a persistent REPL. Use for snippets, calculations, parsing, data work, experiments, and iterative scripting when retained variables, imports, or runtime state are useful. Prefer shell only when shell semantics, a separate process, a specific CLI, or an existing script file is required. Node code can emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
+      'Default tool for executing TypeScript, JavaScript, or Node.js code, including snippets, calculations, parsing, data work, experiments, and iterative scripting. State persists across calls. Prefer shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required. Node code can emit in-memory images with opencode.emitImage({ bytes, mimeType, filename? }).',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
@@ -41,7 +41,7 @@ function addTools(
   editor.add({
     name: 'repl_python',
     description:
-      'Execute Python code in a persistent REPL. Use for snippets, calculations, parsing, data work, experiments, and iterative scripting when retained imports, variables, or runtime state are useful. Prefer shell only when shell semantics, a separate process, a specific CLI, or an existing script file is required.',
+      'Default tool for executing Python code, including snippets, calculations, parsing, data work, experiments, and iterative scripting. Imports, variables, and runtime state persist across calls. Prefer shell only when shell semantics, a separate process, a specific CLI invocation, or execution of an existing script file is required.',
     input: evalInputSchema,
     output: jobOperationOutputSchema,
     options: { codemode: false },
