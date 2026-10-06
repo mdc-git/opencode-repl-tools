@@ -3,9 +3,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import signal
+import subprocess
 import sys
 from collections import OrderedDict
 from contextlib import suppress
+from pathlib import Path
 from queue import Empty
 from typing import Any
 
@@ -25,12 +29,19 @@ def diagnostic(message: str) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--cwd", required=True)
+    parser.add_argument("--resource-dir", required=True)
     return parser.parse_args()
 
 
 async def main() -> int:
     args = parse_args()
-    manager = AsyncKernelManager(kernel_name="python3")
+    resource_dir = Path(args.resource_dir)
+    manager = AsyncKernelManager(
+        kernel_name="python3",
+        transport="ipc",
+        ip=f"{resource_dir}/k",
+        connection_file=f"{resource_dir}/c.json",
+    )
     command_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
     active_job_id: str | None = None
     active_msg_id: str | None = None
@@ -66,11 +77,64 @@ async def main() -> int:
             message["jobId"] = job_id
         emit(message)
 
-    await manager.start_kernel(cwd=args.cwd)
-    client = manager.client()
-    client.start_channels()
-    await client.wait_for_ready()
-    emit({"type": "ready", "pythonVersion": sys.version.split()[0]})
+    def remember_kernel_group() -> None:
+        provisioner = getattr(manager, "provisioner", None)
+        pid = getattr(provisioner, "pid", None)
+        if not isinstance(pid, int):
+            return
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:
+            return
+        marker = resource_dir / "kernel.pgid"
+        temporary_marker = resource_dir / "kernel.pgid.tmp"
+        temporary_marker.write_text(f"{pgid}\n", encoding="ascii")
+        temporary_marker.replace(marker)
+
+    async def start_kernel() -> None:
+        nonlocal client
+        await manager.start_kernel(
+            cwd=args.cwd, stdout=subprocess.DEVNULL
+        )
+        remember_kernel_group()
+        client = manager.client()
+        client.start_channels()
+        await client.wait_for_ready()
+        emit({"type": "ready", "pythonVersion": sys.version.split()[0]})
+
+    startup_cancelled = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, startup_cancelled.set)
+    loop.add_signal_handler(signal.SIGINT, startup_cancelled.set)
+    client = None
+    startup_task = asyncio.create_task(start_kernel())
+    cancellation_task = asyncio.create_task(startup_cancelled.wait())
+    try:
+        done, _ = await asyncio.wait(
+            (startup_task, cancellation_task), return_when=asyncio.FIRST_COMPLETED
+        )
+        if cancellation_task in done and not startup_task.done():
+            startup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await startup_task
+            raise RuntimeError("Python REPL startup was interrupted")
+        await startup_task
+    except BaseException:
+        with suppress(BaseException):
+            remember_kernel_group()
+        with suppress(BaseException):
+            await manager.shutdown_kernel(now=True)
+        if client is not None:
+            with suppress(BaseException):
+                client.stop_channels()
+        raise
+    finally:
+        if not cancellation_task.done():
+            cancellation_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cancellation_task
+        loop.remove_signal_handler(signal.SIGTERM)
+        loop.remove_signal_handler(signal.SIGINT)
 
     async def shutdown_kernel() -> bool:
         nonlocal shutting_down, shutdown_done
@@ -235,10 +299,14 @@ async def main() -> int:
             )
             try:
                 value = await stdin_waiter
-                client.input(value)
+            except asyncio.CancelledError:
+                if shutting_down:
+                    raise
+                continue
             finally:
                 stdin_waiter = None
                 stdin_job_id = None
+            client.input(value)
 
     async def run_execute(job_id: str, code: str) -> None:
         nonlocal active_job_id, active_msg_id, active_task, stdin_waiter, stdin_job_id

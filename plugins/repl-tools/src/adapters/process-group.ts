@@ -84,15 +84,10 @@ async function forceRetire(pid: number, options: RetireOptions): Promise<Cleanup
   }
 }
 
-export async function retireProcessGroup(
-  child: ChildProcess,
+export async function retireProcessGroupId(
+  pid: number,
   options: RetireOptions
 ): Promise<CleanupResult> {
-  const { pid } = child
-  if (pid === undefined) {
-    return { confirmed: true }
-  }
-
   if (!isGroupPresent(pid)) {
     return { confirmed: true }
   }
@@ -103,6 +98,18 @@ export async function retireProcessGroup(
   }
 
   return forceRetire(pid, options)
+}
+
+export async function retireProcessGroup(
+  child: ChildProcess,
+  options: RetireOptions
+): Promise<CleanupResult> {
+  const { pid } = child
+  if (pid === undefined) {
+    return { confirmed: true }
+  }
+
+  return retireProcessGroupId(pid, options)
 }
 
 export async function killProcessGroup(child: ChildProcess, waitMs: number): Promise<void> {

@@ -85,6 +85,10 @@ Then:
 
 The same Python interpreter stays alive between evaluations.
 
+Python kernel channels use private Unix-domain IPC sockets in a per-kernel
+directory under `/tmp/opencode`. The kernel also opens one localhost TCP
+listener for its internal subprocess-output pipe.
+
 ## Background jobs
 
 Evaluations begin in the foreground. Long-running work automatically becomes a

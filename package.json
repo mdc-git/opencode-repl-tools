@@ -29,6 +29,8 @@
     "prettier": "^3.9.6"
   },
   "overrides": {
-    "@opentelemetry/core": "2.8.0"
+    "@opentelemetry/core": "2.8.0",
+    "braces": "npm:@dieub/braces-depth-guard@3.0.3-pn.3",
+    "katex": "0.18.2"
   }
 }

@@ -4,18 +4,17 @@ import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 import { NdjsonDecoder, encodeNdjson } from '../../ndjson.ts'
 import type { OutputStream } from '../../model.ts'
-import { retireProcessGroup, type CleanupResult } from '../process-group.ts'
+import type { CleanupResult } from '../process-group.ts'
 import { errorMessage } from '../protocol.ts'
 import { decodePythonEvent, type PythonBrokerEvent } from './protocol.ts'
+import {
+  createPythonResourceDir,
+  removePythonResourceDir,
+  retirePythonResources
+} from './resources.ts'
 import type { PythonEvalResult, PythonEvent, PythonInterpreter } from './types.ts'
 
 const brokerPath = fileURLToPath(new URL('../../../workers/python-kernel.py', import.meta.url))
-const RETIRE_OPTIONS = {
-  orderlyWaitMs: 4500,
-  termWaitMs: 750,
-  killWaitMs: 750,
-  label: 'Python broker/kernel'
-} as const
 
 type PendingEval = {
   readonly jobId: string
@@ -25,6 +24,7 @@ type PendingEval = {
 
 type PythonConnectionOptions = {
   readonly child: ChildProcessWithoutNullStreams
+  readonly resourceDir: string
   readonly onEvent: (event: PythonEvent) => void
 }
 
@@ -38,6 +38,7 @@ export class PythonConnection implements PythonInterpreter {
   private closed = false
   private fatalSeen = false
   private shutdownRequested = false
+  private startupCancelled = false
   private shutdownPromise: Promise<CleanupResult> | undefined
   private readonly ready = Promise.withResolvers<string>()
 
@@ -141,9 +142,14 @@ export class PythonConnection implements PythonInterpreter {
   }
 
   private cancelStartup(): void {
+    if (this.closed) {
+      return
+    }
+
     this.shutdownRequested = true
+    this.startupCancelled = true
     this.ready.reject(new Error('Python REPL startup was cancelled'))
-    void retireProcessGroup(this.options.child, RETIRE_OPTIONS)
+    void this.shutdown().catch(() => undefined)
   }
 
   private assertActive(jobId: string): void {
@@ -190,8 +196,18 @@ export class PythonConnection implements PythonInterpreter {
     }
 
     signal.addEventListener('abort', abortStartup, { once: true })
+    if (signal.aborted) {
+      abortStartup()
+    }
+
     try {
-      return await this.ready.promise
+      const version = await this.ready.promise
+      if (signal.aborted) {
+        abortStartup()
+        throw new Error('Python REPL startup was cancelled')
+      }
+
+      return version
     } finally {
       signal.removeEventListener('abort', abortStartup)
     }
@@ -234,12 +250,18 @@ export class PythonConnection implements PythonInterpreter {
     }
 
     this.shutdownRequested = true
-    const current = retireProcessGroup(this.options.child, {
-      ...RETIRE_OPTIONS,
-      orderly: () => {
-        this.requestShutdown()
-      }
-    })
+    const options = this.startupCancelled
+      ? undefined
+      : () => {
+          this.requestShutdown()
+        }
+
+    const current = retirePythonResources(
+      this.options.child,
+      this.options.resourceDir,
+      this.startupCancelled,
+      options
+    )
     this.shutdownPromise = current.then((result) => this.finishShutdown(result))
     return this.shutdownPromise
   }
@@ -255,14 +277,27 @@ export function spawnPythonConnection(options: {
   readonly cwd: string
   readonly onEvent: (event: PythonEvent) => void
 }): PythonConnection {
-  const child = spawn(options.python, [brokerPath, '--cwd', options.cwd], {
-    cwd: options.cwd,
-    env: process.env,
-    detached: true,
-    stdio: ['pipe', 'pipe', 'pipe']
-  })
+  const resourceDir = createPythonResourceDir()
+  let child: ChildProcessWithoutNullStreams
+  try {
+    child = spawn(
+      options.python,
+      [brokerPath, '--cwd', options.cwd, '--resource-dir', resourceDir],
+      {
+        cwd: options.cwd,
+        env: process.env,
+        detached: true,
+        stdio: ['pipe', 'pipe', 'pipe']
+      }
+    )
+  } catch (error) {
+    removePythonResourceDir(resourceDir)
+    throw error
+  }
+
   return new PythonConnection({
     child,
+    resourceDir,
     onEvent: options.onEvent
   })
 }
