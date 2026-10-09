@@ -44,11 +44,7 @@ function isReadTruncated(
   selectedFirst: StoredChunk | undefined,
   cursor: number
 ): boolean {
-  if (selectedFirst?.isPartial === true) {
-    return true
-  }
-
-  return first !== undefined && cursor < first.cursor - 1
+  return selectedFirst?.isPartial === true || (first !== undefined && cursor < first.cursor - 1)
 }
 
 export class OutputRing {
