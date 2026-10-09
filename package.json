@@ -26,7 +26,7 @@
     "eslint-plugin-boundaries": "^7.2.0",
     "eslint-plugin-sonarjs": "^4.2.0",
     "knip": "^6.39.0",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.9"
   },
   "overrides": {
     "@opentelemetry/core": "2.8.0",
