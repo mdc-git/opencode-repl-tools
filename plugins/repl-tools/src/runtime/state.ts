@@ -25,7 +25,7 @@ function hasWorkspaceMismatch(
   expectedWorkspace: string | undefined,
   actual: string | undefined
 ): boolean {
-  return expectedWorkspace === undefined || actual === undefined ? false : expectedWorkspace !== actual;
+  return expectedWorkspace !== undefined && actual !== undefined && expectedWorkspace !== actual
 }
 
 function lifecycleForInterpreter(cell: Cell): 'healthy' | 'live' {
