@@ -32,11 +32,11 @@ type EnvironmentPaths = {
 
 function parseVersion(version: string): PythonVersion | undefined {
   const parts = VERSION_PATTERN.exec(version.trim())?.groups
-  return parts === undefined ? undefined : { major: Number(parts.major), minor: Number(parts.minor) };
+  return parts === undefined ? undefined : { major: Number(parts.major), minor: Number(parts.minor) }
 }
 
 function isSupportedVersion(version: PythonVersion | undefined): version is PythonVersion {
-  return version === undefined ? false : version.major > 3 || (version.major === 3 && version.minor >= 10);
+  return version !== undefined && (version.major > 3 || (version.major === 3 && version.minor >= 10))
 }
 
 function cacheRoot(): string {
