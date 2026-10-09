@@ -19,11 +19,12 @@ function isTerminalNotificationState(job: Job): boolean {
 }
 
 function canNotifyTerminal(cell: Cell, job: Job): boolean {
-  if (isNotificationSuppressed(cell, job) || job.terminalNotificationDone) {
-    return false
-  }
-
-  return job.backgrounded && isTerminalNotificationState(job)
+  return (
+    !isNotificationSuppressed(cell, job) &&
+    !job.terminalNotificationDone &&
+    job.backgrounded &&
+    isTerminalNotificationState(job)
+  )
 }
 
 function terminalText(cell: Cell, job: Job): string {
@@ -42,11 +43,12 @@ function isInputNotificationBlocked(job: Job): boolean {
 }
 
 function canNotifyInput(job: Job, serial: number): boolean {
-  if (isInputNotificationBlocked(job) || (job.state !== 'waiting_input')) {
-    return false
-  }
-
-  return job.inputSerial === serial && job.inputNotificationSerial < serial
+  return (
+    !isInputNotificationBlocked(job) &&
+    job.state === 'waiting_input' &&
+    job.inputSerial === serial &&
+    job.inputNotificationSerial < serial
+  )
 }
 
 function inputText(job: Job): string {
