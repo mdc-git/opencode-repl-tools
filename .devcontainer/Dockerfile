@@ -94,7 +94,7 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --production --frozen-lockfile --ignore-scripts
 
 FROM tooling-base AS python-dependencies
-COPY plugins/repl/requirements.txt /tmp/requirements.txt
+COPY plugins/repl-tools/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     set -eux; \
     requirements_sha="$(sha256sum /tmp/requirements.txt | cut -d' ' -f1)"; \
