@@ -16,7 +16,7 @@
   "dependencies": {
     "@opencode/plugin": "latest",
     "effect": "4.0.0-rc.112",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
