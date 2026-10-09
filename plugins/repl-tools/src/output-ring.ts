@@ -36,11 +36,7 @@ function publicChunk(chunk: StoredChunk): OutputChunk {
 }
 
 function normalizeCursor(cursor: number): number {
-  if (!Number.isSafeInteger(cursor)) {
-    return 0
-  }
-
-  return Math.max(cursor, 0)
+  return Number.isSafeInteger(cursor) ? Math.max(cursor, 0) : 0
 }
 
 function isReadTruncated(
@@ -48,15 +44,7 @@ function isReadTruncated(
   selectedFirst: StoredChunk | undefined,
   cursor: number
 ): boolean {
-  if (selectedFirst?.isPartial === true) {
-    return true
-  }
-
-  if (first === undefined) {
-    return false
-  }
-
-  return cursor < first.cursor - 1
+  return selectedFirst?.isPartial === true || (first !== undefined && cursor < first.cursor - 1)
 }
 
 export class OutputRing {
