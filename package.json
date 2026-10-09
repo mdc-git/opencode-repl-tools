@@ -19,7 +19,7 @@
     "typescript": "^6.0.3"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.4",
     "dependency-cruiser": "^18.2.0",
     "eslint": "^10.10.0",
     "eslint-config-xo": "^2.0.0",
