@@ -127,11 +127,13 @@ function isNodeStdinAllowed(job: Job): boolean {
 }
 
 function isStdinAllowed(found: FoundJob): boolean {
-  if ((found.cell.active !== found.job) || (found.cell.interpreter === undefined)) {
+  if (found.cell.active !== found.job || found.cell.interpreter === undefined) {
     return false
   }
 
-  return found.job.language === 'python' ? found.job.state === 'waiting_input' : isNodeStdinAllowed(found.job);
+  return found.job.language === 'python'
+    ? found.job.state === 'waiting_input'
+    : isNodeStdinAllowed(found.job)
 }
 
 async function sendStdin(found: FoundJob, data: string) {
@@ -218,7 +220,9 @@ function operateFound(state: RuntimeState, found: FoundJob, input: JobInput) {
     return Effect.succeed(statusOperation(found, input))
   }
 
-  return input.action === 'stdin' ? stdinOperation(state, found, input) : cancelOperation(state, found);
+  return input.action === 'stdin'
+    ? stdinOperation(state, found, input)
+    : cancelOperation(state, found)
 }
 
 function jobOperation(state: RuntimeState): ReplRuntime['job'] {

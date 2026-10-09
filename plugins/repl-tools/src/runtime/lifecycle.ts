@@ -46,7 +46,7 @@ function existingCancelState(
     return { kind: 'terminal' }
   }
 
-  return cell.lifecycle === 'failed' ? { kind: 'failed' } : undefined;
+  return cell.lifecycle === 'failed' ? { kind: 'failed' } : undefined
 }
 
 function abortStartup(job: Job): void {
@@ -163,7 +163,9 @@ function preparedCancelResult(
     return expected('not_found', `job ${job.id} was invalidated`)
   }
 
-  return prepared.kind === 'failed' ? expected('lifecycle', cleanupError(cell, 'Cell teardown is unconfirmed')) : snapshot(cell, job, job.startCursor, true);
+  return prepared.kind === 'failed'
+    ? expected('lifecycle', cleanupError(cell, 'Cell teardown is unconfirmed'))
+    : snapshot(cell, job, job.startCursor, true)
 }
 
 function waitStartingCancel(cell: Cell, job: Job): Effect.Effect<JobOperationOutput> {
@@ -184,7 +186,9 @@ function cancelActive(
 ): Effect.Effect<JobOperationOutput> {
   return Effect.gen(function* () {
     yield* Effect.promise(async () => interruptWithGrace(cell, job, interpreter))
-    return isTerminal(job.state) && interpreter.alive() ? snapshot(cell, job, job.startCursor, true) : (yield* hardRetireForCancel(state, cell, job, interpreter));
+    return isTerminal(job.state) && interpreter.alive()
+      ? snapshot(cell, job, job.startCursor, true)
+      : yield* hardRetireForCancel(state, cell, job, interpreter)
   })
 }
 
@@ -199,7 +203,9 @@ export function cancelWork(
       return yield* waitStartingCancel(cell, job)
     }
 
-    return prepared.kind === 'active' ? (yield* cancelActive(state, cell, job, prepared.interpreter)) : preparedCancelResult(cell, job, prepared);
+    return prepared.kind === 'active'
+      ? yield* cancelActive(state, cell, job, prepared.interpreter)
+      : preparedCancelResult(cell, job, prepared)
   })
 }
 
@@ -210,7 +216,7 @@ type ResetPreparation = {
 }
 
 function suppressActive(active: Job | undefined): void {
-  if ((active === undefined) || isTerminal(active.state)) {
+  if (active === undefined || isTerminal(active.state)) {
     return
   }
 
@@ -278,7 +284,7 @@ function startupCompletion(prepared: ResetPreparation): Promise<void> | undefine
     return undefined
   }
 
-  return prepared.active?.state === 'starting' ? prepared.active.completion.promise : undefined;
+  return prepared.active?.state === 'starting' ? prepared.active.completion.promise : undefined
 }
 
 export function resetCell(state: RuntimeState, cell: Cell): Effect.Effect<ResetOutput> {

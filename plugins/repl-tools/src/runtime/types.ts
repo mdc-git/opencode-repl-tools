@@ -112,7 +112,7 @@ export function isSameCell(map: Map<string, Cell>, cell: Cell): boolean {
 
 export function findJob(cell: Cell, id: string): Job | undefined {
   const { active } = cell
-  return active?.id === id ? active : cell.history.find((job) => job.id === id);
+  return active?.id === id ? active : cell.history.find((job) => job.id === id)
 }
 
 function retainJob(cell: Cell, job: Job): void {
@@ -175,5 +175,7 @@ export function newJob(cell: Cell, language: Language): Job {
 }
 
 export function startupCleanup(error: unknown): CleanupRetry | undefined {
-  return error instanceof NodeStartupError || error instanceof PythonStartupError ? error.retryCleanup : undefined;
+  return error instanceof NodeStartupError || error instanceof PythonStartupError
+    ? error.retryCleanup
+    : undefined
 }

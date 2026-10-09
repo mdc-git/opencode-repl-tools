@@ -57,7 +57,9 @@ export class RuntimeState {
       return expected('lifecycle', 'session moved away from this plugin location')
     }
 
-    return hasWorkspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID) ? expected('lifecycle', 'session workspace no longer matches this plugin location') : { ok: true as const, session };
+    return hasWorkspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID)
+      ? expected('lifecycle', 'session workspace no longer matches this plugin location')
+      : { ok: true as const, session }
   }
 
   private installReplacement(
@@ -65,7 +67,7 @@ export class RuntimeState {
     cell: Cell,
     replacement: Scope.Closeable | undefined
   ): boolean {
-    if (!isSameCell(map, cell) || (cell.lifecycle === 'failed')) {
+    if (!isSameCell(map, cell) || cell.lifecycle === 'failed') {
       return false
     }
 

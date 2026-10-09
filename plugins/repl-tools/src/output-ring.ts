@@ -36,7 +36,7 @@ function publicChunk(chunk: StoredChunk): OutputChunk {
 }
 
 function normalizeCursor(cursor: number): number {
-  return Number.isSafeInteger(cursor) ? Math.max(cursor, 0) : 0;
+  return Number.isSafeInteger(cursor) ? Math.max(cursor, 0) : 0
 }
 
 function isReadTruncated(

@@ -34,7 +34,9 @@ function jobError(cell: Cell, job: Job) {
     return job.error
   }
 
-  return cell.cleanupError === undefined ? job.error : { kind: 'lifecycle' as const, message: cell.cleanupError };
+  return cell.cleanupError === undefined
+    ? job.error
+    : { kind: 'lifecycle' as const, message: cell.cleanupError }
 }
 
 function inputDetails(job: Job): Pick<JobStatus, 'prompt' | 'password'> {
@@ -49,7 +51,9 @@ function inputDetails(job: Job): Pick<JobStatus, 'prompt' | 'password'> {
 }
 
 function selectedChunks(chunks: readonly OutputChunk[], isPreview: boolean | undefined) {
-  return isPreview === true ? previewChunks(chunks, PREVIEW_BYTES) : { chunks: [...chunks], truncated: false };
+  return isPreview === true
+    ? previewChunks(chunks, PREVIEW_BYTES)
+    : { chunks: [...chunks], truncated: false }
 }
 
 function withError(error: JobStatus['error']): Pick<JobStatus, 'error'> {

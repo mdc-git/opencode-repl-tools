@@ -143,7 +143,7 @@ function canAcceptInterpreter(
   job: Job,
   interpreter: Interpreter
 ): boolean {
-  if (!isSameCell(map, cell) || (cell.active !== job) || isInterpreterBlocked(cell)) {
+  if (!isSameCell(map, cell) || cell.active !== job || isInterpreterBlocked(cell)) {
     return false
   }
 
@@ -163,7 +163,7 @@ function markExistingRunning(cell: Cell, job: Job): void {
 }
 
 function startupDiagnostic(cell: Cell, job: Job, error: unknown): void {
-  if (!(error instanceof PythonStartupError) || (error.diagnosticTail === undefined)) {
+  if (!(error instanceof PythonStartupError) || error.diagnosticTail === undefined) {
     return
   }
 
@@ -270,7 +270,7 @@ function completeEvaluation(
   job: Job,
   result: Awaited<ReturnType<typeof evaluateInterpreter>>
 ): void {
-  if ((cell.active !== job) || isTerminal(job.state)) {
+  if (cell.active !== job || isTerminal(job.state)) {
     return
   }
 
