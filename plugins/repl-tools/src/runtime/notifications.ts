@@ -23,7 +23,7 @@ function canNotifyTerminal(cell: Cell, job: Job): boolean {
     return false
   }
 
-  return job.backgrounded ? isTerminalNotificationState(job) : false;
+  return job.backgrounded && isTerminalNotificationState(job)
 }
 
 function terminalText(cell: Cell, job: Job): string {
@@ -46,7 +46,7 @@ function canNotifyInput(job: Job, serial: number): boolean {
     return false
   }
 
-  return job.inputSerial === serial ? job.inputNotificationSerial < serial : false;
+  return job.inputSerial === serial && job.inputNotificationSerial < serial
 }
 
 function inputText(job: Job): string {
