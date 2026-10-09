@@ -48,7 +48,7 @@ function isReadTruncated(
     return true
   }
 
-  return first === undefined ? false : cursor < first.cursor - 1;
+  return first !== undefined && cursor < first.cursor - 1
 }
 
 export class OutputRing {
