@@ -15,11 +15,7 @@ export type RetireOptions = {
 }
 
 function errorCode(error: unknown): unknown {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return undefined
-  }
-
-  return error.code
+  return typeof error !== 'object' || error === null || !('code' in error) ? undefined : error.code
 }
 
 function isGroupPresent(pid: number): boolean {
@@ -41,10 +37,12 @@ async function isGroupGoneAfterWait(pid: number, durationMs: number): Promise<bo
         return
       }
 
-      if (Date.now() >= deadline) {
-        clearInterval(timer)
-        resolve(false)
+      if (!(Date.now() >= deadline)) {
+        return
       }
+
+      clearInterval(timer)
+      resolve(false)
     }, 25)
   })
 }
@@ -93,11 +91,9 @@ export async function retireProcessGroupId(
   }
 
   runOrderly(options.orderly)
-  if (await isGroupGoneAfterWait(pid, options.orderlyWaitMs)) {
-    return { confirmed: true }
-  }
-
-  return forceRetire(pid, options)
+  return (await isGroupGoneAfterWait(pid, options.orderlyWaitMs))
+    ? { confirmed: true }
+    : forceRetire(pid, options)
 }
 
 export async function retireProcessGroup(
@@ -105,11 +101,7 @@ export async function retireProcessGroup(
   options: RetireOptions
 ): Promise<CleanupResult> {
   const { pid } = child
-  if (pid === undefined) {
-    return { confirmed: true }
-  }
-
-  return retireProcessGroupId(pid, options)
+  return pid === undefined ? { confirmed: true } : retireProcessGroupId(pid, options)
 }
 
 export async function killProcessGroup(child: ChildProcess, waitMs: number): Promise<void> {
