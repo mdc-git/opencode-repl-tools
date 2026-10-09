@@ -103,11 +103,7 @@ function findInCell(cell: Cell | undefined, id: string): FoundJob | undefined {
   }
 
   const job = findJob(cell, id)
-  if (job === undefined) {
-    return undefined
-  }
-
-  return { cell, job }
+  return job === undefined ? undefined : { cell, job }
 }
 
 function findSessionJob(
@@ -116,20 +112,14 @@ function findSessionJob(
   id: string
 ) {
   const node = findInCell(map.get(cellKey(sessionID, 'node')), id)
-  if (node !== undefined) {
-    return node
-  }
-
-  return findInCell(map.get(cellKey(sessionID, 'python')), id)
+  return node ?? findInCell(map.get(cellKey(sessionID, 'python')), id)
 }
 
 function statusOperation(found: FoundJob, input: Extract<JobInput, { action: 'status' }>) {
   const cursor = input.cursor ?? found.job.startCursor
-  if (!Number.isSafeInteger(cursor) || cursor < 0) {
-    return operationResult(expected('invalid_state', 'cursor must be a non-negative integer'))
-  }
-
-  return operationResult(snapshot(found.cell, found.job, cursor), found.job)
+  return !Number.isSafeInteger(cursor) || cursor < 0
+    ? operationResult(expected('invalid_state', 'cursor must be a non-negative integer'))
+    : operationResult(snapshot(found.cell, found.job, cursor), found.job)
 }
 
 function isNodeStdinAllowed(job: Job): boolean {
@@ -137,19 +127,13 @@ function isNodeStdinAllowed(job: Job): boolean {
 }
 
 function isStdinAllowed(found: FoundJob): boolean {
-  if (found.cell.active !== found.job) {
+  if (found.cell.active !== found.job || found.cell.interpreter === undefined) {
     return false
   }
 
-  if (found.cell.interpreter === undefined) {
-    return false
-  }
-
-  if (found.job.language === 'python') {
-    return found.job.state === 'waiting_input'
-  }
-
-  return isNodeStdinAllowed(found.job)
+  return found.job.language === 'python'
+    ? found.job.state === 'waiting_input'
+    : isNodeStdinAllowed(found.job)
 }
 
 async function sendStdin(found: FoundJob, data: string) {
@@ -236,11 +220,9 @@ function operateFound(state: RuntimeState, found: FoundJob, input: JobInput) {
     return Effect.succeed(statusOperation(found, input))
   }
 
-  if (input.action === 'stdin') {
-    return stdinOperation(state, found, input)
-  }
-
-  return cancelOperation(state, found)
+  return input.action === 'stdin'
+    ? stdinOperation(state, found, input)
+    : cancelOperation(state, found)
 }
 
 function jobOperation(state: RuntimeState): ReplRuntime['job'] {
