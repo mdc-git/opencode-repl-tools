@@ -25,11 +25,7 @@ function hasWorkspaceMismatch(
   expectedWorkspace: string | undefined,
   actual: string | undefined
 ): boolean {
-  if (expectedWorkspace === undefined || actual === undefined) {
-    return false
-  }
-
-  return expectedWorkspace !== actual
+  return expectedWorkspace === undefined || actual === undefined ? false : expectedWorkspace !== actual;
 }
 
 function lifecycleForInterpreter(cell: Cell): 'healthy' | 'live' {
@@ -61,11 +57,7 @@ export class RuntimeState {
       return expected('lifecycle', 'session moved away from this plugin location')
     }
 
-    if (hasWorkspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID)) {
-      return expected('lifecycle', 'session workspace no longer matches this plugin location')
-    }
-
-    return { ok: true as const, session }
+    return hasWorkspaceMismatch(this.ctx.location.workspaceID, session.location.workspaceID) ? expected('lifecycle', 'session workspace no longer matches this plugin location') : { ok: true as const, session };
   }
 
   private installReplacement(
@@ -73,11 +65,7 @@ export class RuntimeState {
     cell: Cell,
     replacement: Scope.Closeable | undefined
   ): boolean {
-    if (!isSameCell(map, cell)) {
-      return false
-    }
-
-    if (cell.lifecycle === 'failed') {
+    if (!isSameCell(map, cell) || (cell.lifecycle === 'failed')) {
       return false
     }
 

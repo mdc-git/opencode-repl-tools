@@ -21,11 +21,7 @@ function lifecycleError(cell: Cell, language: Language): JobOperationOutput | un
     return expected('lifecycle', cell.cleanupError ?? 'Cell teardown is unconfirmed')
   }
 
-  if (cell.lifecycle === 'retiring') {
-    return expected('lifecycle', `${language} Cell is retiring its interpreter`)
-  }
-
-  return undefined
+  return cell.lifecycle === 'retiring' ? expected('lifecycle', `${language} Cell is retiring its interpreter`) : undefined;
 }
 
 function admissionError(
@@ -41,11 +37,7 @@ function admissionError(
     return denied
   }
 
-  if (hasActiveJob(cell)) {
-    return expected('busy', `${language} Cell already has an active job`)
-  }
-
-  return undefined
+  return hasActiveJob(cell) ? expected('busy', `${language} Cell already has an active job`) : undefined;
 }
 
 function prepareJob(cell: Cell, language: Language): Job {

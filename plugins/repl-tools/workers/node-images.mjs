@@ -66,11 +66,7 @@ function imageName(value) {
 }
 
 function imageInput(value) {
-  if (typeof value !== 'object') {
-    throw new TypeError('opencode.emitImage expects { bytes, mimeType, filename? }')
-  }
-
-  if (value === null) {
+  if ((typeof value !== 'object') || (value === null)) {
     throw new TypeError('opencode.emitImage expects { bytes, mimeType, filename? }')
   }
 

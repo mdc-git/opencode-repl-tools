@@ -76,11 +76,7 @@ function cleanupUnspawnedBroker(
     return undefined
   }
 
-  if (broker.confirmed) {
-    return removeResourceDir(resourceDir)
-  }
-
-  return broker
+  return broker.confirmed ? removeResourceDir(resourceDir) : broker;
 }
 
 function removeResourceDir(resourceDir: string): CleanupResult {

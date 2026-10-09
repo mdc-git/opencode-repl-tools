@@ -22,11 +22,7 @@ function cleanupInvalidated(cell: Cell): Effect.Effect<CleanupResult | undefined
   }
 
   const { cleanupRetry } = cell
-  if (cleanupRetry !== undefined) {
-    return Effect.promise(async () => safeRetry(cleanupRetry))
-  }
-
-  return Effect.succeed(undefined)
+  return cleanupRetry === undefined ? Effect.succeed(undefined) : Effect.promise(async () => safeRetry(cleanupRetry));
 }
 
 function warnCleanup(cell: Cell, result: CleanupResult | undefined) {
