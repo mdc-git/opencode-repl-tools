@@ -103,7 +103,7 @@ function findInCell(cell: Cell | undefined, id: string): FoundJob | undefined {
   }
 
   const job = findJob(cell, id)
-  return job === undefined ? undefined : { cell, job };
+  return job === undefined ? undefined : { cell, job }
 }
 
 function findSessionJob(
@@ -112,12 +112,14 @@ function findSessionJob(
   id: string
 ) {
   const node = findInCell(map.get(cellKey(sessionID, 'node')), id)
-  return node === undefined ? findInCell(map.get(cellKey(sessionID, 'python')), id) : node;
+  return node ?? findInCell(map.get(cellKey(sessionID, 'python')), id)
 }
 
 function statusOperation(found: FoundJob, input: Extract<JobInput, { action: 'status' }>) {
   const cursor = input.cursor ?? found.job.startCursor
-  return !Number.isSafeInteger(cursor) || cursor < 0 ? operationResult(expected('invalid_state', 'cursor must be a non-negative integer')) : operationResult(snapshot(found.cell, found.job, cursor), found.job);
+  return !Number.isSafeInteger(cursor) || cursor < 0
+    ? operationResult(expected('invalid_state', 'cursor must be a non-negative integer'))
+    : operationResult(snapshot(found.cell, found.job, cursor), found.job)
 }
 
 function isNodeStdinAllowed(job: Job): boolean {
