@@ -65,7 +65,7 @@ export function snapshot(cell: Cell, job: Job, cursor?: number, isPreview?: bool
     language: job.language,
     state: job.state,
     cursor: read.cursor,
-    truncated: read.truncated ? true : limited.truncated,
+    truncated: read.truncated || limited.truncated,
     chunks: limited.chunks,
     ...inputDetails(job),
     ...withError(jobError(cell, job))
