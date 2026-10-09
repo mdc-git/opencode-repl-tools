@@ -26,19 +26,13 @@ function lineText(text) {
 }
 
 function fullReason(error) {
-  if (error instanceof Error) {
-    return error.stack ?? `${error.name}: ${error.message}`
-  }
-
-  return String(error)
+  return error instanceof Error ? (error.stack ?? `${error.name}: ${error.message}`) : String(error)
 }
 
 function conciseError(error) {
-  if (!(error instanceof Error)) {
-    return { kind: 'Error', message: String(error) }
-  }
-
-  return { kind: error.name || 'Error', message: error.message }
+  return error instanceof Error
+    ? { kind: error.name || 'Error', message: error.message }
+    : { kind: 'Error', message: String(error) }
 }
 
 const sessionDirectory = requiredCwd()
@@ -244,11 +238,7 @@ function shutdown() {
 }
 
 function commandType(message) {
-  if (typeof message !== 'object' || message === null) {
-    return undefined
-  }
-
-  return message.type
+  return typeof message !== 'object' || message === null ? undefined : message.type
 }
 
 function handleControl(message) {

@@ -12,13 +12,13 @@ function isUtf8ContinuationByte(byte: number | undefined): boolean {
   return byte !== undefined && byte >= 0x80 && byte <= 0xbf
 }
 
-function utf8Tail(text: string, maxBytes: number): string {
+function utf8Tail(text: string): string {
   const buffer = Buffer.from(text, 'utf8')
-  if (buffer.length <= maxBytes) {
+  if (buffer.length <= DIAGNOSTIC_BYTES) {
     return text
   }
 
-  let start = buffer.length - maxBytes
+  let start = buffer.length - DIAGNOSTIC_BYTES
   while (isUtf8ContinuationByte(buffer[start])) {
     start += 1
   }
@@ -54,11 +54,11 @@ class CommandCapture {
   private onStdout(chunk: unknown): void {
     const text = chunkText(chunk)
     this.stdout += text
-    this.tail = utf8Tail(this.tail + text, DIAGNOSTIC_BYTES)
+    this.tail = utf8Tail(this.tail + text)
   }
 
   private onStderr(chunk: unknown): void {
-    this.tail = utf8Tail(this.tail + chunkText(chunk), DIAGNOSTIC_BYTES)
+    this.tail = utf8Tail(this.tail + chunkText(chunk))
   }
 
   private abort(reject: (reason: Error) => void): void {
