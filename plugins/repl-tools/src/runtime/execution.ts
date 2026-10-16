@@ -34,11 +34,7 @@ function updateWaitingInput(
   event: Extract<PythonEvent, { type: 'waiting_input' }>
 ): Job | undefined {
   const job = cell.active
-  if (job?.id !== event.jobId) {
-    return undefined
-  }
-
-  if (isTerminal(job.state)) {
+  if (job === undefined || job.id !== event.jobId || isTerminal(job.state)) {
     return undefined
   }
 
