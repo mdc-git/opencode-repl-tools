@@ -139,9 +139,9 @@ export class RuntimeState {
         ).pipe(
           Effect.flatMap((isUsed) => {
             const closeReplacement =
-              replacement !== undefined && !isUsed
-                ? Scope.close(replacement, Exit.void)
-                : Effect.void
+              replacement === undefined || isUsed
+                ? Effect.void
+                : Scope.close(replacement, Exit.void)
             return closeReplacement.pipe(Effect.andThen(Scope.close(oldScope, Exit.void)))
           })
         )
