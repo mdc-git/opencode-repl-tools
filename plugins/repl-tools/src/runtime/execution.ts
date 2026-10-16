@@ -29,16 +29,16 @@ type StartupFailure = {
 
 type StartupResult = StartedInterpreter | StartupFailure
 
+function isTerminalJob(job: Job | undefined): boolean {
+  return job?.state !== undefined && isTerminal(job.state)
+}
+
 function updateWaitingInput(
   cell: Cell,
   event: Extract<PythonEvent, { type: 'waiting_input' }>
 ): Job | undefined {
   const job = cell.active
-  if (job?.id !== event.jobId) {
-    return undefined
-  }
-
-  if (isTerminal(job.state)) {
+  if (job?.id !== event.jobId || isTerminalJob(job)) {
     return undefined
   }
 

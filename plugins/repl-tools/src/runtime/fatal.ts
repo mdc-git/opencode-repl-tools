@@ -25,11 +25,7 @@ function prepareFatal(
   message: string,
   map: Map<string, Cell>
 ): FatalPreparation | undefined {
-  if (!isSameCell(map, cell)) {
-    return undefined
-  }
-
-  if (isFatalBlocked(cell)) {
+  if (!isSameCell(map, cell) || isFatalBlocked(cell)) {
     return undefined
   }
 
