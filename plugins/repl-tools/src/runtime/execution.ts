@@ -30,7 +30,11 @@ type StartupFailure = {
 type StartupResult = StartedInterpreter | StartupFailure
 
 function isTerminalJob(job: Job | undefined): boolean {
-  return job === undefined ? false : isTerminal(job.state)
+  if (job === undefined) {
+    return false
+  }
+
+  return isTerminal(job.state)
 }
 
 function updateWaitingInput(
