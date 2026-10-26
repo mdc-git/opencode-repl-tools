@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_IMAGE=node:26.8.2-bookworm-slim
+ARG NODE_IMAGE=node:26.12.1-bookworm-slim
 ARG BUN_IMAGE=oven/bun:1
 ARG RUNTIME_IMAGE=debian:bookworm-slim
 ARG TTYD_VERSION=1.7.7
